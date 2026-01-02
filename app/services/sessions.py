@@ -12,6 +12,7 @@ class LoginSession:
     session_id: str
     created_at: int
     expires_at: int
+    browser_key: str | None  # RQ1: Browser Binding
     approved: bool = False
     approved_at: int | None = None
     consumed: bool = False
@@ -38,7 +39,7 @@ class SessionStore:
         for s_id in expired:
             self._sessions.pop(s_id, None)
 
-    def create(self) -> LoginSession:
+    def create(self, browser_key: str | None = None) -> LoginSession:
         # Create a new session for login
         with self.lock:
             self._cleanup()
@@ -49,6 +50,7 @@ class SessionStore:
                 session_id=session_id,
                 created_at=now,
                 expires_at=now + self.ttl_seconds,
+                browser_key=browser_key,
                 approved=False,
                 approved_at=None,
                 consumed=False,
