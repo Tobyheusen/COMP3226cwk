@@ -6,9 +6,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from app.routes.auth import router as auth_router, store
 from app.core.config import settings
-import qrcode
-import io
-import base64
+
+import secrets
 
 app = FastAPI(title="QR Login Prototype")
 app.include_router(auth_router)
@@ -19,24 +18,6 @@ def health():
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
-    # Create a new session
-    session = store.create()
-    
-    # Generate scan URL
-    base = str(request.base_url).rstrip("/")
-    scan_url = f"{base}/auth/scan?s_id={session.session_id}&nonce={session.approval_nonce}"
-    
-    # Generate QR code
-    qr = qrcode.QRCode(version=1, box_size=10, border=5)
-    qr.add_data(scan_url)
-    qr.make(fit=True)
-    
-    img = qr.make_image(fill_color="black", back_color="white")
-    buffer = io.BytesIO()
-    img.save(buffer, format="PNG")
-    buffer.seek(0)
-    qr_image_base64 = base64.b64encode(buffer.getvalue()).decode()
-    
     # HTML page with QR code and polling
     html_content = f"""
     <!DOCTYPE html>
@@ -97,22 +78,64 @@ def login_page(request: Request):
             <h1>QR Code Login</h1>
             <p>Scan this QR code with your phone to log in</p>
             <div id="qr-code">
-                <img src="data:image/png;base64,{qr_image_base64}" alt="QR Code" />
+                <span class="loading">Generating secure session...</span>
             </div>
             <div id="status" class="pending">Waiting for scan...</div>
         </div>
         <script>
-            const sessionId = '{session.session_id}';
+            // Get or Create Browser Key 
+            let browserKey = localStorage.getItem('qr_browser_key');
+            if (!browserKey) {{
+                console.log("Generating new browser key");
+                browserKey = Math.random().toString(36).substring(2) + Date.now().toString(36);
+                localStorage.setItem('qr_browser_key', browserKey);
+            }}
+
             const pollInterval = {settings.POLL_MIN_INTERVAL_MS};
             let pollTimer = null;
-            
-            function updateStatus(status, message) {{
+            let sessionId = null;
+
+            function updateStatus(cls, message) {{
                 const statusEl = document.getElementById('status');
-                statusEl.className = status;
+                statusEl.className = cls;
                 statusEl.textContent = message;
+            }}
+
+            async function initSession() {{
+                try {{
+                    // Request new session, passing the browserKey
+                    const res = await fetch('/auth/session', {{
+                        method: 'POST',
+                        headers: {{ 'Content-Type': 'application/json' }},
+                        body: JSON.stringify({{ BROWSER_KEY: browserKey }})
+                    }});
+                    
+                    if (!res.ok) throw new Error('Failed to create session');
+                    
+                    const data = await res.json();
+                    sessionId = data.s_id;
+
+                    // Render QR Code
+                    const img = document.createElement('img');
+                    img.src = "data:image/png;base64," + data.qr_base64;
+                    const qrContainer = document.getElementById('qr-code');
+                    qrContainer.innerHTML = '';
+                    qrContainer.appendChild(img);
+                    
+                    updateStatus('pending', 'Waiting for scan...');
+                    
+                    // 4. Start Polling
+                    pollTimer = setInterval(pollStatus, pollInterval);
+
+                }} catch (e) {{
+                    console.error(e);
+                    updateStatus('error', 'Error initializing session');
+                }}
             }}
             
             async function pollStatus() {{
+                if (!sessionId) return;
+
                 try {{
                     const response = await fetch(`/auth/poll?session_id=${{sessionId}}`);
                     const data = await response.json();
@@ -121,38 +144,35 @@ def login_page(request: Request):
                         updateStatus('approved', '✓ Approved! Exchanging for token...');
                         clearInterval(pollTimer);
                         
-                        // Exchange for token
+                        // Exchange for token (Secure Mode requires browserKey)
                         const exchangeResponse = await fetch('/auth/exchange', {{
                             method: 'POST',
                             headers: {{ 'Content-Type': 'application/json' }},
-                            body: JSON.stringify({{ s_id: sessionId }})
+                            body: JSON.stringify({{ 
+                                s_id: sessionId,
+                                BROWSER_KEY: browserKey 
+                            }})
                         }});
                         
                         if (exchangeResponse.ok) {{
                             const tokenData = await exchangeResponse.json();
-                            updateStatus('approved', '✓ Login successful! Token: ' + tokenData.access_tkn.substring(0, 20) + '...');
+                            updateStatus('approved', '✓ Login successful!');
+                            console.log("Token:", tokenData.access_tkn);
+                            // Redirect or store token here
                         }} else {{
                             updateStatus('error', '✗ Failed to exchange token');
                         }}
                     }} else if (data.status === 'expired') {{
-                        updateStatus('expired', '✗ Session expired. Please refresh the page.');
-                        clearInterval(pollTimer);
-                    }} else if (data.status === 'consumed') {{
-                        updateStatus('error', '✗ Session already used');
-                        clearInterval(pollTimer);
-                    }} else if (data.status === 'not_found') {{
-                        updateStatus('error', '✗ Session not found');
+                        updateStatus('expired', '✗ Session expired. Refresh page.');
                         clearInterval(pollTimer);
                     }}
                 }} catch (error) {{
                     console.error('Poll error:', error);
-                    updateStatus('error', '✗ Error checking status');
                 }}
             }}
             
-            // Start polling
-            pollTimer = setInterval(pollStatus, pollInterval);
-            pollStatus(); // Initial poll
+            // Start
+            initSession();
         </script>
     </body>
     </html>

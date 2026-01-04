@@ -16,6 +16,7 @@ class LoginSession:
     approved_at: int | None = None
     consumed: bool = False
     approval_nonce: str = ""
+    BROWSER_KEY: str | None = None  # Optional field for browser key auth, for secure model
 
 class SessionStore:
     def __init__(self, ttl_seconds: int):
@@ -38,7 +39,7 @@ class SessionStore:
         for s_id in expired:
             self._sessions.pop(s_id, None)
 
-    def create(self) -> LoginSession:
+    def create(self, BROWSER_KEY: str | None = None) -> LoginSession:
         # Create a new session for login
         with self.lock:
             self._cleanup()
@@ -52,7 +53,8 @@ class SessionStore:
                 approved=False,
                 approved_at=None,
                 consumed=False,
-                approval_nonce=approval_nonce
+                approval_nonce=approval_nonce,
+                BROWSER_KEY=BROWSER_KEY
             )
             self._sessions[session_id] = s
             return s

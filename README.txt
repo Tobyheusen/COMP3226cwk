@@ -32,3 +32,14 @@ uvicorn app.main:app --reload
 
 # Usage: after running **uvicorn app.main:app --reload** 
 # Open using this link: http://127.0.0.1:8000/login
+
+python -m venv venv
+./venv/Scripts/Activate.ps1
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+
+python -m venv venv
+./venv/Scripts/Activate.ps1
+pip install -r requirements.txt
+$env:BASE_URL = "http://192.168.1.40:8000"
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
