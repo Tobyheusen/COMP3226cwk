@@ -7,6 +7,8 @@ from pydantic import BaseModel
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.services.sessions import SessionStore
+from app.services.limiter import limiter
+from app.core.security import encrypt_qr_payload, decrypt_qr_payload
 
 import qrcode
 import io
@@ -40,12 +42,23 @@ class ExchangeResp(BaseModel):
 
 @router.post("/session", response_model=CreateSessionResp)  #Logic here has been moved from main.py
 def create_session(request: Request, body: CreateSessionReq):
+    """
+    creates a new login session and returns the QR code data
+    
+    :param request: Description
+    :type request: Request
+    :param body: Description
+    :type body: CreateSessionReq
+    """
     # Create a login session
     s = store.create(BROWSER_KEY=body.BROWSER_KEY)
     print(f"Browser Key is: {s}")
 
-    base = os.getenv("BASE_URL", str(request.base_url).rstrip("/"))
-    scan_url = f"{base}/auth/scan?s_id={s.session_id}&nonce={s.approval_nonce}"
+    base_url_str = os.getenv("BASE_URL", str(request.base_url).rstrip("/"))
+
+    #Encrypted handelling 
+    encrypted_token = encrypt_qr_payload(s.session_id, s.approval_nonce)
+    scan_url = f"{base_url_str}/auth/scan?token={encrypted_token}"
 
     # Generate QR code
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
@@ -57,13 +70,35 @@ def create_session(request: Request, body: CreateSessionReq):
     img.save(buffer, format="PNG")
     buffer.seek(0)
     qr_image_base64 = base64.b64encode(buffer.getvalue()).decode()
+
+    print(f"Created session {s.session_id} with scan URL: {scan_url}")
+    print(f"Encrypted version is: {encrypted_token}")
+    print(f"Which decodes to: {decrypt_qr_payload(encrypted_token)}")
     
     return CreateSessionResp(s_id=s.session_id, scan_url=scan_url,qr_base64=qr_image_base64)
 
 @router.get("/scan", response_class=HTMLResponse)
-def scan_link(s_id: str, nonce: str):
-    ok = store.approve(s_id, nonce)
+def scan_link(request: Request, token: str):
+    """
+    scan link is endpoint for QR code approval
     
+    :param request: Description
+    :type request: Request
+    :param token: Description
+    :type token: str
+    """
+
+    limiter.check(request)
+
+    decrypted = decrypt_qr_payload(token)
+
+    if not decrypted:
+        return HTMLResponse(content="<h1>Error</h1><p>Invalid or tampered QR code</p>", status_code=400)
+    
+    s_id, nonce = decrypted
+
+    ok = store.approve(s_id, nonce)
+
     if not ok:
         return HTMLResponse(
             content="""
@@ -79,6 +114,9 @@ def scan_link(s_id: str, nonce: str):
             """.format(s_id),
             status_code=400
         )
+    
+    print (f"Session {s_id} approved via scan")
+    print (f'The security settings used where {settings.LONG_SESSION_TTL_SECONDS}, {settings.LONG_POLL_MIN_INTERVAL_MS} and {settings.BROWSER_KEY}')
     
     return HTMLResponse(
         content="""
@@ -99,9 +137,16 @@ def scan_link(s_id: str, nonce: str):
         status_code=200
     )
 
+
 @router.get("/poll", response_model=PollResp)
 def poll(session_id: str):
-# Desktop polls for session approval
+    """
+    polls for session approval status
+    
+    :param session_id: Description
+    :type session_id: str
+    """
+    # Desktop polls for session approval
     s = store.get(session_id)
     if not s:
         return PollResp(status="not_found")
@@ -120,6 +165,12 @@ def poll(session_id: str):
 
 @router.post("/exchange", response_model=ExchangeResp)
 def exchange(req: ExchangeReq):
+    """
+    exchanges approved session for access token
+    
+    :param req: Description
+    :type req: ExchangeReq
+    """
     # Desktop exchanges the session for an access token
 
     s = store.get(req.s_id)

@@ -14,10 +14,16 @@ app.include_router(auth_router)
 
 @app.get("/health")
 def health():
+    """
+    health Simple health check endpoint
+    """
     return {"ok": True}
 
 @app.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
+    """
+    login_page Serves the login page with QR code and polling logic
+    """
     # HTML page with QR code and polling
     html_content = f"""
     <!DOCTYPE html>

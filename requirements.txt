@@ -3,3 +3,4 @@ uvicorn[standard]
 qrcode[pil]
 pydantic
 PyJWT
+cryptography
