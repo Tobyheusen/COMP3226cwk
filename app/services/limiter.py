@@ -1,6 +1,7 @@
 import time
 from fastapi import Request, HTTPException
 from app.core.config import settings
+from app.services.logger import log_event
 
 class RateLimiter:
     def __init__(self):
@@ -34,6 +35,12 @@ class RateLimiter:
 
         # Check count
         if len(self._requests[client_ip]) >= settings.MAX_REQUESTS_PER_MINUTE:
+            #logging
+            log_event(
+                event_type="brute_force_blocked",
+                session_id=f"IP_{client_ip}",
+                outcome="blocked"
+            )
             raise HTTPException(status_code=429, detail="Too many login attempts. Please wait.")
 
         # Add current request

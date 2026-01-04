@@ -1,6 +1,7 @@
 # Authentication-related routes, including QR session creation, 
 # approval, polling, and token exchange.
 
+from time import time
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -9,11 +10,13 @@ from app.core.security import create_access_token
 from app.services.sessions import SessionStore
 from app.services.limiter import limiter
 from app.core.security import encrypt_qr_payload, decrypt_qr_payload
+from app.services.logger import log_event
 
 import qrcode
 import io
 import os
 import base64
+import time
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 store = SessionStore(ttl_seconds=settings.SESSION_TTL_SECONDS)
@@ -71,9 +74,7 @@ def create_session(request: Request, body: CreateSessionReq):
     buffer.seek(0)
     qr_image_base64 = base64.b64encode(buffer.getvalue()).decode()
 
-    print(f"Created session {s.session_id} with scan URL: {scan_url}")
-    print(f"Encrypted version is: {encrypted_token}")
-    print(f"Which decodes to: {decrypt_qr_payload(encrypted_token)}")
+    log_event("session_created", s.session_id, "success")
     
     return CreateSessionResp(s_id=s.session_id, scan_url=scan_url,qr_base64=qr_image_base64)
 
@@ -90,16 +91,22 @@ def scan_link(request: Request, token: str):
 
     limiter.check(request)
 
-    decrypted = decrypt_qr_payload(token)
-
-    if not decrypted:
-        return HTMLResponse(content="<h1>Error</h1><p>Invalid or tampered QR code</p>", status_code=400)
+    if token:
+        decrypted = decrypt_qr_payload(token)
+        if not decrypted:
+            # Log this as a Tampering Attempt
+            log_event("scan_attempt", "unknown", "tampering_detected_decrypt_fail")
+            return HTMLResponse(content="Error", status_code=400)
+        s_id, nonce = decrypted
     
-    s_id, nonce = decrypted
+    # If s_id and nonce exist directly, for future insecure mode
+    elif s_id and nonce:
+        pass
 
     ok = store.approve(s_id, nonce)
 
     if not ok:
+        log_event("scan_attempt", s_id if s_id else "unknown", "failed_invalid_or_expired")
         return HTMLResponse(
             content="""
             <!DOCTYPE html>
@@ -115,9 +122,8 @@ def scan_link(request: Request, token: str):
             status_code=400
         )
     
-    print (f"Session {s_id} approved via scan")
-    print (f'The security settings used where {settings.LONG_SESSION_TTL_SECONDS}, {settings.LONG_POLL_MIN_INTERVAL_MS} and {settings.BROWSER_KEY}')
-    
+    log_event("scan_attempt", s_id, "approved_by_device")
+
     return HTMLResponse(
         content="""
         <!DOCTYPE html>
@@ -178,8 +184,8 @@ def exchange(req: ExchangeReq):
         raise HTTPException(status_code=404, detail="Session not found")
     
     if settings.BROWSER_KEY:  #check secure mode 
-        print(f"Secure Mode Enabled. Validating browser key: {req.BROWSER_KEY} against {s.BROWSER_KEY}")
         if not req.BROWSER_KEY or req.BROWSER_KEY != s.BROWSER_KEY:  # Validate browser key
+            log_event("login_completion", req.s_id, "failed_browser_binding_mismatch")
             raise HTTPException(status_code=400, detail="Invalid browser key for secure mode")
     
     if not s.approved:
@@ -188,8 +194,10 @@ def exchange(req: ExchangeReq):
     if not store.consume(req.s_id):
         raise HTTPException(status_code=400, detail="Session already consumed or invalid")
     
+    latency = int((time.time() - s.created_at) * 1000) # ms
+    log_event("login_completion", req.s_id, "success", latency_ms=latency)
+
     # Minimal "user" placeholder for now
     # Replace with actual user/device identifier later
     access_token = create_access_token("qr_user")
-
     return ExchangeResp(access_tkn=access_token)
