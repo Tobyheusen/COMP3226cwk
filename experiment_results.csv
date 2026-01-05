@@ -3,3 +3,5 @@ timestamp,event_type,session_id,outcome,latency_ms
 1767541134.4461257,session_created,kTZDnH1Ev53X8oyPUxGoVmprosR10r_u,success,0
 1767541141.0512135,scan_attempt,kTZDnH1Ev53X8oyPUxGoVmprosR10r_u,approved_by_device,0
 1767541141.6943164,login_completion,kTZDnH1Ev53X8oyPUxGoVmprosR10r_u,success,7693
+1767541183.904324,scan_attempt,unknown,tampering_detected_decrypt_fail,0
+1767541183.9047985,scan_attempt,unknown,tampering_detected_decrypt_fail,0
