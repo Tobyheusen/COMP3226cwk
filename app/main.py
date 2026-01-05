@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from app.routes import auth
+import json
 
 app = FastAPI(title="QR Login Prototype")
 
@@ -51,6 +52,8 @@ def login_page():
                         loginId = data.login_id;
                         document.getElementById('qr-image').src = "data:image/png;base64," + data.qr_image;
                         document.getElementById('status').innerText = "Scan the QR code with your device.";
+                        document.getElementById('qr-link').href = data.qr_link;
+                        document.getElementById('qr-link').innerText = data.qr_link;
                         document.getElementById('raw-payload').innerText = data.qr_payload;
 
                         pollStatus();
@@ -85,44 +88,101 @@ def login_page():
             <h1>Scan this QR Code</h1>
             <div id="status">Loading...</div>
             <img id="qr-image" style="border: 1px solid #ccc; padding: 10px;"/>
+            <p>Or click this link (simulating scanning): <br> <a id="qr-link" target="_blank" href="#">Loading...</a></p>
 
             <hr>
-            <h3>Simulation Tools (Mobile Device)</h3>
-            <p>Copy the raw payload below to simulate scanning:</p>
+            <h3>Debug Info</h3>
+            <p>Raw Payload:</p>
             <textarea id="raw-payload" rows="4" cols="50" readonly></textarea>
-            <br>
-            <button onclick="simulateScan()">Simulate Scan</button>
-            <button onclick="simulateApprove()">Simulate Approve</button>
-            <div id="sim-result"></div>
+        </body>
+    </html>
+    """
 
+@app.get("/mobile-sim", response_class=HTMLResponse)
+def mobile_sim_page(p: str):
+    """
+    Simulates the Mobile App View.
+    Receives payload 'p' from the URL (QR Code).
+    """
+    # Safe serialization to JS string (handles quotes, backslashes, XSS)
+    payload_js = json.dumps(p)
+
+    return f"""
+    <html>
+        <head>
+            <title>Mobile App Simulation</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body {{ font-family: sans-serif; padding: 20px; text-align: center; }}
+                button {{ padding: 15px 30px; font-size: 18px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; }}
+                button:disabled {{ background-color: #ccc; }}
+                .error {{ color: red; }}
+            </style>
             <script>
-                async function simulateScan() {
-                    const payload = document.getElementById('raw-payload').value;
-                    const response = await fetch('/auth/scan', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ qr_raw_payload: payload })
-                    });
+                const payload = {payload_js};
+                let loginId = null;
 
-                    const res = await response.json();
-                    if (!response.ok) {
-                         document.getElementById('sim-result').innerText = "Scan Failed: " + (res.detail || JSON.stringify(res));
-                    } else {
-                         document.getElementById('sim-result').innerText = "Scan Result: " + JSON.stringify(res);
-                    }
-                }
+                async function init() {{
+                    document.getElementById('status').innerText = "Verifying QR Code...";
 
-                async function simulateApprove() {
+                    // 1. Simulate App Scanning (calls /scan)
+                    try {{
+                        const response = await fetch('/auth/scan', {{
+                            method: 'POST',
+                            headers: {{'Content-Type': 'application/json'}},
+                            body: JSON.stringify({{ qr_raw_payload: payload }})
+                        }});
+
+                        const res = await response.json();
+                        if (!response.ok) {{
+                            document.getElementById('status').innerText = "Scan Failed: " + (res.detail || JSON.stringify(res));
+                            document.getElementById('status').className = "error";
+                            return;
+                        }}
+
+                        loginId = res.login_id;
+                        document.getElementById('status').innerText = "Login Request Found! Do you want to approve?";
+                        document.getElementById('approve-btn').disabled = false;
+
+                    }} catch (e) {{
+                         document.getElementById('status').innerText = "Network Error: " + e;
+                         document.getElementById('status').className = "error";
+                    }}
+                }}
+
+                async function approve() {{
                     if (!loginId) return;
-                    const response = await fetch('/auth/approve', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({ login_id: loginId, user_id: "alice" })
-                    });
-                    const res = await response.json();
-                    document.getElementById('sim-result').innerText = "Approve Result: " + JSON.stringify(res);
-                }
+                    document.getElementById('approve-btn').disabled = true;
+                    document.getElementById('approve-btn').innerText = "Approving...";
+
+                    try {{
+                        const response = await fetch('/auth/approve', {{
+                            method: 'POST',
+                            headers: {{'Content-Type': 'application/json'}},
+                            body: JSON.stringify({{ login_id: loginId, user_id: "alice" }})
+                        }});
+
+                        if (!response.ok) {{
+                             document.getElementById('status').innerText = "Approval Failed.";
+                             return;
+                        }}
+
+                        document.getElementById('status').innerText = "Approved! You can close this window.";
+                        document.getElementById('approve-btn').style.display = 'none';
+
+                    }} catch (e) {{
+                        document.getElementById('status').innerText = "Error: " + e;
+                    }}
+                }}
+
+                window.onload = init;
             </script>
+        </head>
+        <body>
+            <h2>Mobile Authenticator</h2>
+            <div id="status">Loading...</div>
+            <br>
+            <button id="approve-btn" onclick="approve()" disabled>Approve Login</button>
         </body>
     </html>
     """
