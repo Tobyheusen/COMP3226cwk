@@ -8,40 +8,56 @@ class Settings:
     """
     QR code login application settings.
     """
-    APP_NAME = "OR Login Prototype"
+    APP_NAME = "QR Login Prototype"
     JWT_SECRET = os.getenv("JWT_SECRET", "dev-change-me")
     JWT_ISSUER = os.getenv("JWT_ISSUER", "qr-login-local")
     JWT_AUDIENCE = os.getenv("JWT_AUDIENCE", "qr-login-browser")
 
-    #Security settings
-    BROWSER_KEY = os.getenv("BROWSER_KEY", "True").lower() == "true"  # To get a secure mode (will change to have more settings later)
+    # Security Mode: "secure" or "insecure"
+    SECURITY_MODE = os.getenv("SECURITY_MODE", "secure").lower()
 
-    SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "0")) # 2 Minutes
-    LONG_SESSION_TTL_SECONDS = os.getenv("SESSION_TTL_SECONDS", "True").lower() == "true"
+    @property
+    def IS_SECURE(self) -> bool:
+        return self.SECURITY_MODE == "secure"
+
+    # RQ3 implementation
+    ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
+
+    @property
+    def ENCRYPTION_ENABLED(self) -> bool:
+        return self.IS_SECURE
+
+    # RQ1 implementation: Browser Binding
+    @property
+    def BROWSER_KEY(self) -> bool:
+        # In secure mode, we enforce browser binding
+        return self.IS_SECURE
+
+    # RQ2 implementation: Token Lifecycle & Rate Limiting
     @property
     def SESSION_TTL_SECONDS(self) -> int:
-        if self.LONG_SESSION_TTL_SECONDS:
-            return 60  # 1 Minute
+        # Secure: 30-60 seconds (spec says 30-60 considered acceptable)
+        # Insecure: Extended life-span (e.g. 10 minutes)
+        if self.IS_SECURE:
+            return 60
         else:
-            return 600  # 10 Minutes
-    
-    LONG_POLL_MIN_INTERVAL_MS = os.getenv("POLL_MIN_INTERVAL_MS", "True").lower() == "true"
-    POLL_MIN_INTERVAL_MS = int(os.getenv("POLL_MIN_INTERVAL_MS", "0"))
+            return 600
+
     @property
     def POLL_MIN_INTERVAL_MS(self) -> int:
-        if self.LONG_POLL_MIN_INTERVAL_MS:
-            return 800  # 800 ms
-        else:
-            return 300  # 300 ms
+        # Secure: Faster polling allowed or standard?
+        # Spec doesn't explicitly limit polling speed for security, but rate limiting applies.
+        # We'll keep it standard.
+        return 300
 
-    #RQ3 implementation
-    ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", Fernet.generate_key().decode())
-    
-    #RQ2 implementation 
-    RATE_LIMIT_ENABLED = True
-    MAX_REQUESTS_PER_MINUTE = 5
+    @property
+    def RATE_LIMIT_ENABLED(self) -> bool:
+        return self.IS_SECURE
 
-    
+    @property
+    def MAX_REQUESTS_PER_MINUTE(self) -> int:
+        return 5
+
     
 # All saved settings instance
 settings = Settings()

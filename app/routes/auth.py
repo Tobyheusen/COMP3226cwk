@@ -19,6 +19,8 @@ import base64
 import time
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+# Initialize store, note that we should really initialize this once, maybe in main or dependencies
+# But since settings are global, this works, provided store is single instance if updated.
 store = SessionStore(ttl_seconds=settings.SESSION_TTL_SECONDS)
 
 class CreateSessionResp(BaseModel):
@@ -53,15 +55,33 @@ def create_session(request: Request, body: CreateSessionReq):
     :param body: Description
     :type body: CreateSessionReq
     """
+
+    # Refresh TTL based on current settings (in case settings changed or just to be safe)
+    store.ttl_seconds = settings.SESSION_TTL_SECONDS
+
     # Create a login session
     s = store.create(BROWSER_KEY=body.BROWSER_KEY)
-    print(f"Browser Key is: {s}")
 
     base_url_str = os.getenv("BASE_URL", str(request.base_url).rstrip("/"))
 
-    #Encrypted handelling 
-    encrypted_token = encrypt_qr_payload(s.session_id, s.approval_nonce)
-    scan_url = f"{base_url_str}/auth/scan?token={encrypted_token}"
+    if settings.ENCRYPTION_ENABLED:
+        # Encrypted handling for Secure Mode
+        payload = encrypt_qr_payload(s.session_id, s.approval_nonce)
+        scan_url = f"{base_url_str}/auth/scan?token={payload}"
+    else:
+        # Insecure Mode: Simple payload, no encryption, potentially exposing s_id and nonce
+        # Spec says "Simple QR Payloads: QR codes will encode a low-level of entropy session identifiers(sid) or a URL without any additional nonce"
+        # But we need nonce to approve?
+        # "Simple QR Payloads: ... without any additional nonce"
+        # If we remove nonce from QR, how do we approve?
+        # Maybe Insecure mode implicitly assumes no nonce check?
+        # But `approve` method checks nonce.
+        # "QR codes will encode a low-level of entropy session identifiers(sid) or a URL without any additional nonce"
+        # This implies we might just pass s_id.
+        # BUT `approve` logic: `if not nonce or nonce != s.approval_nonce: return False`
+        # So nonce is required by current backend.
+        # To simulate "Insecure", we can expose both in plain text.
+        scan_url = f"{base_url_str}/auth/scan?s_id={s.session_id}&nonce={s.approval_nonce}"
 
     # Generate QR code
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
@@ -79,17 +99,22 @@ def create_session(request: Request, body: CreateSessionReq):
     return CreateSessionResp(s_id=s.session_id, scan_url=scan_url,qr_base64=qr_image_base64)
 
 @router.get("/scan", response_class=HTMLResponse)
-def scan_link(request: Request, token: str):
+def scan_link(request: Request, token: str | None = None, s_id: str | None = None, nonce: str | None = None):
     """
     scan link is endpoint for QR code approval
     
     :param request: Description
     :type request: Request
-    :param token: Description
-    :type token: str
+    :param token: Encrypted token (Secure Mode)
+    :param s_id: Session ID (Insecure Mode)
+    :param nonce: Nonce (Insecure Mode)
     """
 
-    limiter.check(request)
+    if settings.RATE_LIMIT_ENABLED:
+        limiter.check(request)
+
+    session_id_to_approve = None
+    nonce_to_approve = None
 
     if token:
         decrypted = decrypt_qr_payload(token)
@@ -97,16 +122,19 @@ def scan_link(request: Request, token: str):
             # Log this as a Tampering Attempt
             log_event("scan_attempt", "unknown", "tampering_detected_decrypt_fail")
             return HTMLResponse(content="Error", status_code=400)
-        s_id, nonce = decrypted
+        session_id_to_approve, nonce_to_approve = decrypted
     
-    # If s_id and nonce exist directly, for future insecure mode
     elif s_id and nonce:
-        pass
+        # Insecure mode direct parameters
+        session_id_to_approve = s_id
+        nonce_to_approve = nonce
+    else:
+         return HTMLResponse(content="Missing parameters", status_code=400)
 
-    ok = store.approve(s_id, nonce)
+    ok = store.approve(session_id_to_approve, nonce_to_approve)
 
     if not ok:
-        log_event("scan_attempt", s_id if s_id else "unknown", "failed_invalid_or_expired")
+        log_event("scan_attempt", session_id_to_approve if session_id_to_approve else "unknown", "failed_invalid_or_expired_or_replay")
         return HTMLResponse(
             content="""
             <!DOCTYPE html>
@@ -114,15 +142,15 @@ def scan_link(request: Request, token: str):
             <head><title>Login Failed</title></head>
             <body style="text-align: center; padding: 50px;">
                 <h1> X Login Failed</h1>
-                <p>Invalid or expired session. Please try scanning again.</p>
+                <p>Invalid, expired, or replayed session. Please try scanning again.</p>
                 <p><small>Session ID: {}</small></p>
             </body>
             </html>
-            """.format(s_id),
+            """.format(session_id_to_approve),
             status_code=400
         )
     
-    log_event("scan_attempt", s_id, "approved_by_device")
+    log_event("scan_attempt", session_id_to_approve, "approved_by_device")
 
     return HTMLResponse(
         content="""
@@ -183,10 +211,14 @@ def exchange(req: ExchangeReq):
     if not s:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    if settings.BROWSER_KEY:  #check secure mode 
-        if not req.BROWSER_KEY or req.BROWSER_KEY != s.BROWSER_KEY:  # Validate browser key
+    if settings.BROWSER_KEY:  # check secure mode setting
+        # In secure mode, browser binding is mandatory
+        if not req.BROWSER_KEY or req.BROWSER_KEY != s.BROWSER_KEY:
             log_event("login_completion", req.s_id, "failed_browser_binding_mismatch")
             raise HTTPException(status_code=400, detail="Invalid browser key for secure mode")
+    else:
+        # In insecure mode, we might ignore browser key even if sent, or it's not enforced
+        pass
     
     if not s.approved:
         raise HTTPException(status_code=400, detail="Session not approved")

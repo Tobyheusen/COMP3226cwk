@@ -6,6 +6,7 @@ import time
 import secrets
 import threading
 from dataclasses import dataclass
+from app.core.config import settings
 
 @dataclass
 class LoginSession:
@@ -24,6 +25,8 @@ class SessionStore:
             raise ValueError("TTL must be greater than 0")
         self.ttl_seconds = ttl_seconds
         self._sessions: dict[str, LoginSession] = {}
+        # Stores recently consumed nonces to detect replays: {nonce: expire_time}
+        self._consumed_nonces: dict[str, int] = {}
         self.lock = threading.Lock()
 
     def _now(self) -> int:
@@ -38,6 +41,20 @@ class SessionStore:
         ]
         for s_id in expired:
             self._sessions.pop(s_id, None)
+
+        # Remove expired consumed nonces
+        expired_nonces = [
+            nonce for nonce, exp in self._consumed_nonces.items()
+            if exp <= now
+        ]
+        for nonce in expired_nonces:
+            self._consumed_nonces.pop(nonce, None)
+
+    def is_replay(self, nonce: str) -> bool:
+        """Check if a nonce has been recently consumed."""
+        with self.lock:
+            self._cleanup()
+            return nonce in self._consumed_nonces
 
     def create(self, BROWSER_KEY: str | None = None) -> LoginSession:
         # Create a new session for login
@@ -70,11 +87,14 @@ class SessionStore:
                 return None
             return s
 
-    
     def approve(self, s_id: str, nonce: str) -> bool:
         # Session is approved if it exists and is not expired
         # and has not been consumed
         # and the nonce matches the one used for approval
+
+        if settings.IS_SECURE and self.is_replay(nonce):
+            return False
+
         with self.lock:
             self._cleanup()
             s = self._sessions.get(s_id)
@@ -95,7 +115,6 @@ class SessionStore:
                 s.approved_at = now
             return True
         
-    
     def consume(self, s_id: str) -> bool:
         # Consume session once if it exists and is not expired
         # and has not been consumed
@@ -115,5 +134,11 @@ class SessionStore:
                 return False
             
             s.consumed = True
+
+            # Record nonce as consumed to prevent replay
+            # Keep it in cache for a while (e.g. 5 minutes) to detect immediate replays
+            if settings.IS_SECURE:
+                self._consumed_nonces[s.approval_nonce] = now + 300
+
             self._sessions.pop(s_id, None)
             return True
