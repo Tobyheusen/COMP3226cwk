@@ -37,6 +37,9 @@ def login_page():
 
                 // Generate a Web Crypto Key Pair
                 async function generateKey() {
+                    if (!window.crypto || !window.crypto.subtle) {
+                        throw new Error("Web Crypto API not available. This feature requires a Secure Context (HTTPS or localhost).");
+                    }
                     return window.crypto.subtle.generateKey(
                         {
                             name: "RSASSA-PKCS1-v1_5",
@@ -54,6 +57,9 @@ def login_page():
                 }
 
                 async function signData(dataStr) {
+                    if (!window.crypto || !window.crypto.subtle) {
+                         throw new Error("Web Crypto API lost/unavailable.");
+                    }
                     const enc = new TextEncoder();
                     const signature = await window.crypto.subtle.sign(
                         "RSASSA-PKCS1-v1_5",
