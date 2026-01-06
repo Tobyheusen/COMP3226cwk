@@ -10,12 +10,19 @@ app = FastAPI(title="QR Login Prototype")
 app.include_router(auth.router)
 
 @app.get("/", response_class=HTMLResponse)
-def root():
-    return """
+def root(request: Request):
+    base_url = str(request.base_url).rstrip("/")
+    return f"""
     <html>
         <head><title>QR Login</title></head>
         <body style="font-family: sans-serif; padding: 20px;">
             <h1>QR Code Login Prototype</h1>
+            <div style="background: #fff3cd; padding: 15px; border: 1px solid #ffeeba; border-radius: 5px; margin-bottom: 20px;">
+                <strong>Setup Info:</strong>
+                <p>Ensure you are accessing this page via <code>https://</code> (Secure Context).</p>
+                <p>Current Base URL: <code>{base_url}</code></p>
+                <p>If you are on a mobile device, ensure you are connected to the same network and accessing the server via its LAN IP.</p>
+            </div>
             <ul>
                 <li><a href="/login">1. Start Login (Browser)</a></li>
                 <li><a href="/admin">2. Server Admin Dashboard (Approve here)</a></li>

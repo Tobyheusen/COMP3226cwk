@@ -23,3 +23,5 @@ events.jsonl
 
 # Optional: env files
 .env
+*.pem
+*.log
