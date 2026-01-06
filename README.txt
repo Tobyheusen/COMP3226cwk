@@ -46,4 +46,3 @@ This will enforce **Mutual TLS (mTLS)** Both the server and the client (browser/
 
 !!!!!!!!!!!!!!!!!!! YOU NEED TO BE ON A PRIVATE NETWORK< WITH BOTH DEVICES ON THE SAME ONE NETWORK !!!!!!!!!!!!!!!!!!
 
-
