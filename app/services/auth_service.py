@@ -2,8 +2,10 @@ import uuid
 import secrets
 import logging
 from datetime import datetime, timedelta
+import json
 from app.db import db
 from app.core.config import settings
+from app.services.crypto_utils import CryptoUtils
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -126,10 +128,51 @@ class AuthService:
             return {"status": "NOT_FOUND"}
 
         if request["status"] == "AUTHORIZED":
-            return {
+            # In Secure Mode, do not return session_token here.
+            # Client must prove possession of the key.
+            response = {
                 "status": "AUTHORIZED",
-                "session_token": request.get("session_token"),
                 "redirect_url": "/dashboard"
             }
 
+            if not settings.require_browser_binding:
+                # Legacy/Insecure mode: return token directly
+                response["session_token"] = request.get("session_token")
+
+            return response
+
         return {"status": request["status"]}
+
+    @staticmethod
+    def verify_session_proof(login_id: str, signature: str) -> dict:
+        """
+        Verifies that the client possesses the private key corresponding to the
+        public key (browser_key) provided during initiation.
+        """
+        request = db.login_requests.get(login_id)
+        if not request:
+            raise ValueError("Login request not found")
+
+        if request["status"] != "AUTHORIZED":
+            raise ValueError("Login not yet authorized")
+
+        if not settings.require_browser_binding:
+            # If not in secure mode, maybe just return token?
+            # But this endpoint is specifically for proof.
+            return {"session_token": request.get("session_token")}
+
+        browser_key_jwk = request.get("browser_key")
+        if not browser_key_jwk:
+             raise ValueError("No browser key bound to this session")
+
+        try:
+            jwk_dict = json.loads(browser_key_jwk)
+        except json.JSONDecodeError:
+            raise ValueError("Invalid Browser Key format")
+
+        # Verify signature over login_id
+        if CryptoUtils.verify_raw_signature(jwk_dict, login_id, signature):
+            return {"session_token": request.get("session_token")}
+        else:
+            logger.warning(f"Signature verification failed for login_id={login_id}")
+            raise ValueError("Invalid Signature or Proof of Possession failed")

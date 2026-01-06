@@ -23,6 +23,10 @@ class ApproveLoginRequest(BaseModel):
     login_id: str
     user_id: str
 
+class TokenExchangeRequest(BaseModel):
+    login_id: str
+    signature: str # Base64 encoded signature of login_id
+
 @router.post("/init", response_model=InitLoginResponse)
 def initiate_login(body: InitLoginRequest, request: Request):
     """
@@ -97,3 +101,13 @@ def poll_login(login_id: str):
     Called by the browser to check status.
     """
     return AuthService.get_login_status(login_id)
+
+@router.post("/token")
+def exchange_token(body: TokenExchangeRequest):
+    """
+    Called by the browser to exchange a proof of possession for a session token.
+    """
+    try:
+        return AuthService.verify_session_proof(body.login_id, body.signature)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

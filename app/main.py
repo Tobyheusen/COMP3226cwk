@@ -33,10 +33,52 @@ def login_page():
             <style>body { font-family: sans-serif; padding: 20px; }</style>
             <script>
                 let loginId = null;
-                const browserKey = "browser-key-" + Math.random().toString(36).substr(2, 9);
+                let keyPair = null;
+
+                // Generate a Web Crypto Key Pair
+                async function generateKey() {
+                    return window.crypto.subtle.generateKey(
+                        {
+                            name: "RSASSA-PKCS1-v1_5",
+                            modulusLength: 2048,
+                            publicExponent: new Uint8Array([1, 0, 1]),
+                            hash: "SHA-256",
+                        },
+                        false, // non-extractable (hardware-protected simulation)
+                        ["sign", "verify"]
+                    );
+                }
+
+                async function exportPublicKey(key) {
+                    return await window.crypto.subtle.exportKey("jwk", key.publicKey);
+                }
+
+                async function signData(dataStr) {
+                    const enc = new TextEncoder();
+                    const signature = await window.crypto.subtle.sign(
+                        "RSASSA-PKCS1-v1_5",
+                        keyPair.privateKey,
+                        enc.encode(dataStr)
+                    );
+                    // Convert ArrayBuffer to Base64
+                    let binary = '';
+                    const bytes = new Uint8Array(signature);
+                    const len = bytes.byteLength;
+                    for (let i = 0; i < len; i++) {
+                        binary += String.fromCharCode(bytes[i]);
+                    }
+                    return window.btoa(binary);
+                }
 
                 async function startLogin() {
                     try {
+                        document.getElementById('status').innerText = "Generating Secure Key...";
+                        keyPair = await generateKey();
+                        const pubKeyJWK = await exportPublicKey(keyPair);
+
+                        // browser_key is now the stringified JWK
+                        const browserKey = JSON.stringify(pubKeyJWK);
+
                         const response = await fetch('/auth/init', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
@@ -68,8 +110,36 @@ def login_page():
                         const data = await response.json();
 
                         if (data.status === 'AUTHORIZED') {
-                            document.getElementById('status').innerText = "✅ Login Successful!";
-                            document.getElementById('token').innerText = "Session Token: " + data.session_token;
+                            // If session_token is present (insecure mode), show it.
+                            if (data.session_token) {
+                                document.getElementById('status').innerText = "✅ Login Successful!";
+                                document.getElementById('token').innerText = "Session Token: " + data.session_token;
+                                clearInterval(interval);
+                                return;
+                            }
+
+                            // Secure Mode: Perform Proof of Possession
+                            document.getElementById('status').innerText = "🔐 Verifying Key Possession...";
+
+                            try {
+                                const signature = await signData(loginId);
+                                const tokenResp = await fetch('/auth/token', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({ login_id: loginId, signature: signature })
+                                });
+
+                                const tokenData = await tokenResp.json();
+                                if (tokenResp.ok) {
+                                    document.getElementById('status').innerText = "✅ Login Successful (Verified)!";
+                                    document.getElementById('token').innerText = "Session Token: " + tokenData.session_token;
+                                } else {
+                                    document.getElementById('status').innerText = "❌ Verification Failed: " + tokenData.detail;
+                                }
+                            } catch (e) {
+                                document.getElementById('status').innerText = "❌ PoP Error: " + e;
+                            }
+
                             clearInterval(interval);
                         } else if (data.status === 'SCANNED') {
                              document.getElementById('status').innerText = "📲 QR Scanned! Waiting for Server Admin approval...";
