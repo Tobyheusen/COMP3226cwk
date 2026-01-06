@@ -30,6 +30,22 @@ python -m venv venv
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 
+## mTLS (Mobile Channel Security)
+To enable Mobile Channel Security (mTLS), you need to run the server with SSL certificates and require client authentication.
+
+1. Generate certificates:
+   `cd certs && bash gen_certs.sh`
+   This creates a CA, Server Cert, and Client Cert (`client.p12`).
+
+2. Run the secure server:
+   `bash run_secure.sh`
+   The server will listen on HTTPS port 8000.
+
+3. Client Setup:
+   - Import `certs/client.p12` (empty password) into your Browser and Mobile device.
+   - Access: `https://localhost:8000/login`
+   - If using the python test script: `python tests/test_mtls_flow.py`
+
 # Usage: after running **uvicorn app.main:app --reload** 
 # Open using this link: http://192.168.1.40:8000/login
 

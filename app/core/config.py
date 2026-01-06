@@ -33,4 +33,7 @@ class Settings(BaseModel):
     def use_signed_qr(self) -> bool:
         return self.SECURITY_MODE == SecurityMode.SECURE
 
+    # mTLS settings
+    USE_MTLS: bool = False
+
 settings = Settings()
