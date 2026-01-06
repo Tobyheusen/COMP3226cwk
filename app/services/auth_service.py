@@ -7,6 +7,9 @@ from app.db import db
 from app.core.config import settings
 from app.services.crypto_utils import CryptoUtils
 
+"""AuthService: Handles the core authentication logic for QR code login flow"""
+
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,7 +59,7 @@ class AuthService:
             return False
 
         if request["status"] != "PENDING":
-            logger.warning(f"Scan failed: login_id={login_id} status is {request['status']}")
+            logger.warning(f"Scan failed: login_id={login_id} status is already {request['status']}")
             return False
 
         # Check Expiry
@@ -68,6 +71,7 @@ class AuthService:
 
         # Verify Payload content matches DB
         if qr_payload.get("login_id") != login_id:
+            logger.warning(f"Scan failed: login_id={login_id} mismatch")
             return False
 
         if qr_payload.get("browser_sid") != request["browser_sid"]:
@@ -79,12 +83,12 @@ class AuthService:
             received_nonce = qr_payload.get("qr_nonce")
             stored_nonce = request["qr_nonce"]
 
-            # 1. Nonce Matching
+            # Nonce Matching
             if received_nonce != stored_nonce:
                 logger.warning(f"Scan failed: login_id={login_id} invalid nonce")
                 return False
 
-            # 2. Replay Protection
+            # Replay Protection
             if received_nonce in db.used_nonces:
                 logger.warning(f"Replay detected: login_id={login_id} nonce used")
                 return False
@@ -103,13 +107,14 @@ class AuthService:
         """
         request = db.login_requests.get(login_id)
         if not request or request["status"] != "SCANNED":
+            logger.warning(f"Approve failed: login_id={login_id} not found or not scanned")
             return False
 
-        # Create session
+        # Create session, and encrypt the session token if needed
         session_token = secrets.token_urlsafe(32)
-        device_bound = bool(request.get("browser_key"))
+        device_bound = bool(request.get("browser_key"))  # prevents session hijacking if browser_key is set
 
-        db.sessions[session_token] = {
+        db.sessions[session_token] = {  # Saves to memory db
             "user_id": user_id,
             "browser_sid": request["browser_sid"],
             "created_at": datetime.utcnow(),
@@ -125,6 +130,7 @@ class AuthService:
     def get_login_status(login_id: str) -> dict:
         request = db.login_requests.get(login_id)
         if not request:
+            logger.warning(f"Status check failed: login_id={login_id} not found")
             return {"status": "NOT_FOUND"}
 
         if request["status"] == "AUTHORIZED":
@@ -139,9 +145,9 @@ class AuthService:
                 # Legacy/Insecure mode: return token directly
                 response["session_token"] = request.get("session_token")
 
-            return response
+            return response  # returns the response 
 
-        return {"status": request["status"]}
+        return {"status": request["status"]}  # Searches for the status fort that request 
 
     @staticmethod
     def verify_session_proof(login_id: str, signature: str) -> dict:
@@ -151,9 +157,11 @@ class AuthService:
         """
         request = db.login_requests.get(login_id)
         if not request:
+            logger.warning(f"Session proof failed: login_id={login_id} not found")
             raise ValueError("Login request not found")
 
         if request["status"] != "AUTHORIZED":
+            logger.warning(f"Session proof failed: login_id={login_id} not authorized")
             raise ValueError("Login not yet authorized")
 
         if not settings.require_browser_binding:
@@ -163,11 +171,13 @@ class AuthService:
 
         browser_key_jwk = request.get("browser_key")
         if not browser_key_jwk:
+             logger.error(f"Session proof failed: login_id={login_id} missing browser key")
              raise ValueError("No browser key bound to this session")
 
         try:
             jwk_dict = json.loads(browser_key_jwk)
         except json.JSONDecodeError:
+            logger.error(f"Session proof failed: login_id={login_id} invalid browser key format")
             raise ValueError("Invalid Browser Key format")
 
         # Verify signature over login_id

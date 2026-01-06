@@ -10,14 +10,13 @@ class QRService:
     @staticmethod
     def generate_signed_payload(data: dict) -> str:
         """
-        Generates the payload string. Signs it if in Secure mode.
-        To ensure robust verification, the inner data is stringified first.
+        Generates the payload string. Signs it if in Secure mode
+        To ensure robust verification, the inner data is stringified first
         Structure: { "data_str": "{...json...}", "sig": "..." }
         """
-        # Serialize the actual data to a stable string representation
-        # separators=(',', ':') removes whitespace for compactness and consistency
         data_str = json.dumps(data, separators=(',', ':'))
 
+        # Encrypts the data_str using SECRET_KEY
         if settings.use_signed_qr:
             signature = hmac.new(
                 settings.SECRET_KEY.encode(),
@@ -27,16 +26,13 @@ class QRService:
             # Return a wrapper containing the stringified data and signature
             return json.dumps({"data_str": data_str, "sig": signature})
 
-        # In insecure mode, just return the JSON string directly?
-        # Or return the same wrapper without sig?
-        # The spec says "Simple QR Payloads: ... without any additional nonce, integrity protection"
-        # So it should probably just be the raw JSON of data.
+        # Return the insecure data string directly
         return data_str
 
     @staticmethod
     def create_qr_image(data_str: str) -> str:
         """
-        Creates a QR code image and returns it as a base64 string.
+        Creates a QR code image and returns it as a base64 string
         """
         qr = qrcode.QRCode(
             version=1,
@@ -57,8 +53,8 @@ class QRService:
     @staticmethod
     def verify_qr_payload(payload_str: str) -> dict | None:
         """
-        Parses and verifies the QR payload.
-        Returns the data dict if valid, None otherwise.
+        Parses and verifies the QR payload
+        Returns the data dict if valid, None otherwise
         """
         try:
             if settings.use_signed_qr:

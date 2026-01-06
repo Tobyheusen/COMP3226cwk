@@ -19,8 +19,13 @@ CLIENT_CERT = "client.crt"
 CLIENT_P12 = "client.p12"
 P12_PASSWORD = b"secret" # Simple password for import
 
+"""
+This script generates mTLS certificates for secure communication
+"""
+
 def get_lan_ip():
     try:
+        # Try to find your ip
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
@@ -31,17 +36,18 @@ def get_lan_ip():
 
 def generate_certs():
     if os.path.exists(CLIENT_P12) and os.path.exists(SERVER_CERT):
-        print("✅ Using existing mTLS certificates.")
+        print("Using existing mTLS certificates.")
         return
 
-    print("🔐 Generating mTLS Certificates...")
+    print("Generating mTLS Certificates...")
 
-    # 1. Generate CA
-    print("   - Generating Root CA...")
+    # Generate CA so phone and server can trust each other
+    print("- Generating Root CA...")
     ca_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     ca_subject = issuer = x509.Name([
         x509.NameAttribute(NameOID.COMMON_NAME, u"QR Login Root CA"),
     ])
+
     ca_cert = x509.CertificateBuilder().subject_name(ca_subject).issuer_name(issuer).public_key(
         ca_key.public_key()
     ).serial_number(x509.random_serial_number()).not_valid_before(
@@ -61,12 +67,13 @@ def generate_certs():
     with open(CA_CERT, "wb") as f:
         f.write(ca_cert.public_bytes(serialization.Encoding.PEM))
 
-    # 2. Generate Server Cert
-    print("   - Generating Server Cert...")
+    # Generate Server Cert
+    print("- Generating Server Cert...")
     server_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     lan_ip = get_lan_ip()
 
-    # SANs: localhost, 127.0.0.1, LAN IP
+    # localhost, 127.0.0.1, ip
+    # Generates server identity
     sans = [
         x509.DNSName(u"localhost"),
         x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
@@ -96,14 +103,14 @@ def generate_certs():
     with open(SERVER_CERT, "wb") as f:
         f.write(server_cert.public_bytes(serialization.Encoding.PEM))
 
-    # 3. Generate Client Cert
-    print("   - Generating Client Cert...")
+    print("- Generating Client Cert...")
     client_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     client_subject = x509.Name([
         x509.NameAttribute(NameOID.COMMON_NAME, u"QR Login Client"),
         x509.NameAttribute(NameOID.ORGANIZATION_NAME, u"Authorized Device"),
     ])
 
+    # Generate Client Cert for the users/ client device 
     client_cert = x509.CertificateBuilder().subject_name(client_subject).issuer_name(ca_subject).public_key(
         client_key.public_key()
     ).serial_number(x509.random_serial_number()).not_valid_before(
@@ -123,8 +130,8 @@ def generate_certs():
     with open(CLIENT_CERT, "wb") as f:
         f.write(client_cert.public_bytes(serialization.Encoding.PEM))
 
-    # 4. Package Client P12
-    print("   - Packaging client.p12...")
+    # Package Client P12, takes the Client's Private Key and the Client's Public Certificate and bundles them into a single file
+    print("- Packaging client.p12...")
     p12 = pkcs12.serialize_key_and_certificates(
         name=b"QR Login Client",
         key=client_key,
@@ -135,7 +142,7 @@ def generate_certs():
     with open(CLIENT_P12, "wb") as f:
         f.write(p12)
 
-    print(f"✅ Certs generated. Client P12 Password: 'secret'")
+    print(f"Certs generated. Client P12 Password: 'secret'")
 
 if __name__ == "__main__":
     generate_certs()

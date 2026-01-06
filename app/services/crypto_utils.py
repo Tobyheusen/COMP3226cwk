@@ -14,8 +14,8 @@ class CryptoUtils:
         from cryptography.hazmat.primitives.asymmetric import padding
 
         try:
-            logger.info(f"Verifying signature for data: {data}")
-            # logger.info(f"JWK: {json.dumps(jwk_dict)}") # Be careful with logs in prod, but ok for debug
+            # logger.info(f"Verifying signature for data: {data}")
+            # logger.info(f"JWK: {json.dumps(jwk_dict)}")
 
             # Load key from JWK using jwcrypto to handle parsing
             key = jwk.JWK(**jwk_dict)
@@ -31,9 +31,6 @@ class CryptoUtils:
                 alg = jwk_dict.get('alg')
                 logger.info(f"JWK alg: {alg}")
 
-                # Web Crypto RSASSA-PKCS1-v1_5 is usually RS256
-                # But sometimes it might be missing alg or different.
-
                 if alg == 'RS256' or alg is None:
                      try:
                         ktype.verify(
@@ -42,11 +39,10 @@ class CryptoUtils:
                             padding.PKCS1v15(),
                             hashes.SHA256()
                         )
-                        logger.info("Verified with RS256")
+                        # logger.info("Verified with RS256")
                         return True
                      except Exception as e:
-                        logger.error(f"RS256 Verify failed: {e}")
-                        # Fallback? No, if it failed it failed.
+                        # logger.error(f"RS256 Verify failed: {e}")
                         return False
 
                 elif alg == 'PS256':
@@ -77,5 +73,4 @@ class CryptoUtils:
         except Exception as e:
             import traceback
             logger.error(f"Signature verification failed with exception: {type(e).__name__}: {e}")
-            logger.error(traceback.format_exc())
             return False

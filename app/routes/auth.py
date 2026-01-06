@@ -4,7 +4,9 @@ from app.services.auth_service import AuthService
 from app.services.qr_service import QRService
 from app.core.config import settings
 import urllib.parse
-
+"""
+Auth handles the QR code data and calls auth_service methods to process the login activities etc
+"""
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 class InitLoginRequest(BaseModel):
@@ -12,8 +14,8 @@ class InitLoginRequest(BaseModel):
 
 class InitLoginResponse(BaseModel):
     login_id: str
-    qr_image: str # Base64
-    qr_payload: str # Raw Data (for debugging/legacy)
+    qr_image: str # Base64, the actual QR code image
+    qr_payload: str # Raw Data
     qr_link: str # The URL encoded in the QR
 
 class ScanLoginRequest(BaseModel):
@@ -27,26 +29,29 @@ class TokenExchangeRequest(BaseModel):
     login_id: str
     signature: str # Base64 encoded signature of login_id
 
+# This is called in the main.py method inside startLogin()
 @router.post("/init", response_model=InitLoginResponse)
 def initiate_login(body: InitLoginRequest, request: Request):
     """
     Called by the browser to start the login flow.
     """
     try:
-        details = AuthService.initiate_login(browser_key=body.browser_key)
+        details = AuthService.initiate_login(browser_key=body.browser_key) # Initiate login, passing the the val of browser_key in body
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))  # if it cannot fail
 
-    # Construct Payload
+    # Construct Payload of the login_id and the browser_sid
     payload_data = {
         "login_id": details["login_id"],
         "browser_sid": details["browser_sid"]
     }
 
-    # Include nonce in Secure Mode
+    # if its in Secure Mode use a nonce
     if settings.SECURITY_MODE == "secure":
         payload_data["qr_nonce"] = details["qr_nonce"]
 
+    # Generate Signed QR Payload based off the data
+    # signing 
     qr_str = QRService.generate_signed_payload(payload_data)
 
     # Generate URL Link
@@ -58,6 +63,7 @@ def initiate_login(body: InitLoginRequest, request: Request):
     # Generate QR Image from the Link
     qr_img = QRService.create_qr_image(qr_link)
 
+    # Returns info to the in the InitLoginResponse class 
     return InitLoginResponse(
         login_id=details["login_id"],
         qr_image=qr_img,
@@ -65,21 +71,24 @@ def initiate_login(body: InitLoginRequest, request: Request):
         qr_link=qr_link
     )
 
+# Called in the main.py method inside onScan() for the mobile app simulation
 @router.post("/scan")
 def scan_login(request: ScanLoginRequest):
     """
     Called by the mobile app (simulated) when scanning.
     """
-    # Verify Signature first
+    # Verify Signature for the QR code payload
     data = QRService.verify_qr_payload(request.qr_raw_payload)
     if not data:
         raise HTTPException(status_code=400, detail="Invalid or Tampered QR")
 
+    # compare login_id from the db
     login_id = data.get("login_id")
     if not login_id:
         raise HTTPException(status_code=400, detail="Missing login_id")
 
-    # Validate Logic (Nonce, Expiry)
+    # Validate the nonce and expary (Nonce, Expiry)
+    # validate_scan takes the login_id and the data dictonary thats vlaidated in the validate_scan method in auth_service.py
     if not AuthService.validate_scan(login_id, data):
         raise HTTPException(status_code=400, detail="Validation Failed (Expired, Invalid Nonce, or Replay)")
 
@@ -90,6 +99,7 @@ def approve_login(request: ApproveLoginRequest):
     """
     Called by the mobile app (simulated) to approve login.
     """
+    # Approve the login in the with the login_id and user_id (user id is only a name no real security implications)
     if AuthService.approve_login(request.login_id, request.user_id):
         return {"status": "APPROVED"}
 
@@ -108,6 +118,7 @@ def exchange_token(body: TokenExchangeRequest):
     Called by the browser to exchange a proof of possession for a session token.
     """
     try:
+        # The signature is the encodded signature of the login_id to stop sessoin_hijacking
         return AuthService.verify_session_proof(body.login_id, body.signature)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

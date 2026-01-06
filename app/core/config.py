@@ -12,7 +12,7 @@ class Settings(BaseModel):
     SECURITY_MODE: SecurityMode = SecurityMode.SECURE
 
     # Secrets
-    SECRET_KEY: str = "supersecretkey"  # In prod, get from env
+    SECRET_KEY: str = "supersecretkey" 
 
     # Timeouts (in seconds)
     LOGIN_TIMEOUT: int = 60  # Default 60s
@@ -22,8 +22,8 @@ class Settings(BaseModel):
     @property
     def token_lifetime(self) -> int:
         if self.SECURITY_MODE == SecurityMode.INSECURE:
-            return 3600  # Long life in insecure mode
-        return 60  # Short life (30-60s) in secure mode
+            return 3600  # insecure mode
+        return 60  # secure mode
 
     @property
     def require_browser_binding(self) -> bool:

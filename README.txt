@@ -1,17 +1,13 @@
 # COMP3226 - QR Login Prototype
 
-This project is a **locally hosted QR-code login prototype** built with **Python** and **FastAPI**.
-It demonstrates **Device Bound Session Credentials (DBSC)** using hardware-protected key pairs and **Mutual TLS (mTLS)** for channel security.
+This is a locally hosted QR-code login prototype built with Pytho and FastAPI
+It demonstrates Device Bound Session Credentials (DBSC) using hardware-protected key pairs and Mutual TLS (mTLS) for channel security
 
-## Prerequisites
+Prerequisites
 
-- **Python:** 3.10 or higher
-- **Git:** For version control
-
-## Installation
+Installation
 
 1.  Create and activate virtual environment:
-    ```bash
     # macOS / Linux
     python3 -m venv venv
     source venv/bin/activate
@@ -19,39 +15,35 @@ It demonstrates **Device Bound Session Credentials (DBSC)** using hardware-prote
     # Windows (PowerShell)
     python -m venv venv
     ./venv/Scripts/Activate.ps1
-    ```
 
 2.  Install dependencies:
-    ```bash
     pip install -r requirements.txt
-    ```
 
-## Running with mTLS
+## NEW STUFF: Running with mTLS
 
-This application enforces **Mutual TLS (mTLS)**. Both the server and the client (browser/mobile) must authenticate using certificates.
+This will enforce **Mutual TLS (mTLS)** Both the server and the client (browser/mobile) so they must authenticate using certificates
 
 1.  Start the server:
-    ```bash
-    python run.py
-    ```
+    # You might need to chmod this 
+    python run.py 
 
     This script will:
     - Automatically generate a **Root CA**, **Server Cert**, and **Client Cert** if they don't exist.
-    - Start the server on `0.0.0.0:8000` with mTLS enforced.
+    - Start the server on "0.0.0.0:8000" with mTLS enforced.
     - Output the generated certificates in the current directory.
 
-2.  **Import Client Certificate:**
-    - Locate the generated `client.p12` file.
-    - **Password:** `secret`
-    - **Desktop:** Import this file into your OS Keychain (macOS) or Browser Certificates (Windows/Chrome/Firefox).
-    - **Mobile:** Transfer this file to your phone and install it in Settings -> Security -> Install from storage.
+2.  Import Client Certificate:
+    - Find the generated "client.p12" file
+    - The Password is : "secret"
+    - To get this to work for browser on desktop: Open file in file explorer, should have a setup wizard 
+    - For mobile: Send this file to your phone (NOT VIA EMAIL, use onedrive/airdrop or something ) and open it, should just work (you will see it in VPN config on iphone)
 
-3.  **Access the Application:**
-    - Visit the **LAN URL** printed in the console (e.g., `https://192.168.1.X:8000`).
+3.  Access the Application:
+    - On desktop/laptop use the LAN URL printed in the console (e.g., "https://192.168.1.X:8000").
     - Your browser will prompt you to select the "QR Login Client" certificate.
-    - Proceed past the self-signed certificate warning (or import `ca.crt` as a trusted root).
+    - Click the QR one the self-signed certificate warning (or import "ca.crt" as a trusted root, same process to do this as above)
 
-## Troubleshooting
 
-- **"Connection Reset" / "SSL Handshake Failed"**: This means your client did not present a valid certificate. Ensure `client.p12` is imported correctly.
-- **"Web Crypto API not available"**: Ensure you are using `https://`.
+!!!!!!!!!!!!!!!!!!! YOU NEED TO BE ON A PRIVATE NETWORK< WITH BOTH DEVICES ON THE SAME ONE NETWORK !!!!!!!!!!!!!!!!!!
+
+

@@ -5,10 +5,13 @@ from app.db import db
 from app.services.auth_service import AuthService
 import json
 
+"""Acts as the main FastAPI app, connects all backend routes and serves simple HTML pages for testing"""
+
 app = FastAPI(title="QR Login Prototype")
 
 app.include_router(auth.router)
 
+# Page without any login, just links to start login or admin
 @app.get("/", response_class=HTMLResponse)
 def root(request: Request):
     base_url = str(request.base_url).rstrip("/")
@@ -31,6 +34,7 @@ def root(request: Request):
     </html>
     """
 
+# Login page with Web Crypto key generation and QR code display
 @app.get("/login", response_class=HTMLResponse)
 def login_page():
     return """
@@ -44,8 +48,9 @@ def login_page():
 
                 // Generate a Web Crypto Key Pair
                 async function generateKey() {
+                    // Calls generateKey() from Web Crypto API to create an RSA key pair 
                     if (!window.crypto || !window.crypto.subtle) {
-                        throw new Error("Web Crypto API not available. This feature requires a Secure Context (HTTPS or localhost).");
+                        throw new Error("Web Crypto API not available. This feature requires a Secure Context (HTTPS or localhost)");
                     }
                     return window.crypto.subtle.generateKey(
                         {
@@ -54,15 +59,17 @@ def login_page():
                             publicExponent: new Uint8Array([1, 0, 1]),
                             hash: "SHA-256",
                         },
-                        false, // non-extractable (hardware-protected simulation)
+                        false, 
                         ["sign", "verify"]
                     );
                 }
-
+                
+                // Export the public key as JWK to server
                 async function exportPublicKey(key) {
                     return await window.crypto.subtle.exportKey("jwk", key.publicKey);
                 }
 
+                // Sign data using the private key
                 async function signData(dataStr) {
                     if (!window.crypto || !window.crypto.subtle) {
                          throw new Error("Web Crypto API lost/unavailable.");
@@ -92,6 +99,7 @@ def login_page():
                         // browser_key is now the stringified JWK
                         const browserKey = JSON.stringify(pubKeyJWK);
 
+                        // send to server to initiate login
                         const response = await fetch('/auth/init', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
@@ -99,6 +107,7 @@ def login_page():
                         });
 
                         const data = await response.json();
+                        // get login_id
                         loginId = data.login_id;
                         
                         document.getElementById('qr-image').src = "data:image/png;base64," + data.qr_image;
@@ -115,24 +124,26 @@ def login_page():
                     }
                 }
 
+                // timer runs every 2 seconds to poll status
                 async function pollStatus() {
                     if (!loginId) return;
                     const interval = setInterval(async () => {
                         // Add timestamp to prevent caching
                         const response = await fetch('/auth/poll/' + loginId + '?t=' + Date.now());
                         const data = await response.json();
-
+                        
+                        // If its auth complete
                         if (data.status === 'AUTHORIZED') {
                             // If session_token is present (insecure mode), show it.
                             if (data.session_token) {
-                                document.getElementById('status').innerText = "✅ Login Successful!";
+                                document.getElementById('status').innerText = "Login Successful!";
                                 document.getElementById('token').innerText = "Session Token: " + data.session_token;
                                 clearInterval(interval);
                                 return;
                             }
 
                             // Secure Mode: Perform Proof of Possession
-                            document.getElementById('status').innerText = "🔐 Verifying Key Possession...";
+                            document.getElementById('status').innerText = "Verifying Key Possession...";
 
                             try {
                                 const signature = await signData(loginId);
@@ -144,23 +155,23 @@ def login_page():
 
                                 const tokenData = await tokenResp.json();
                                 if (tokenResp.ok) {
-                                    document.getElementById('status').innerText = "✅ Login Successful (Verified)!";
+                                    document.getElementById('status').innerText = "Login Successful (Verified)!";
                                     document.getElementById('token').innerText = "Session Token: " + tokenData.session_token;
                                 } else {
-                                    document.getElementById('status').innerText = "❌ Verification Failed: " + tokenData.detail;
+                                    document.getElementById('status').innerText = "Verification Failed: " + tokenData.detail;
                                 }
                             } catch (e) {
-                                document.getElementById('status').innerText = "❌ PoP Error: " + e;
+                                document.getElementById('status').innerText = "Proof of Possession Error: " + e;
                             }
 
                             clearInterval(interval);
                         } else if (data.status === 'SCANNED') {
-                             document.getElementById('status').innerText = "📲 QR Scanned! Waiting for Server Admin approval...";
+                             document.getElementById('status').innerText = "QR Scanned! Waiting for Server Admin approval...";
                         } else if (data.status === 'EXPIRED') {
-                             document.getElementById('status').innerText = "❌ QR Expired. Please refresh.";
+                             document.getElementById('status').innerText = "QR Expired. Please refresh.";
                              clearInterval(interval);
                         } else if (data.status === 'NOT_FOUND') {
-                             document.getElementById('status').innerText = "⚠️ Session lost (Server restarted?). Refresh page.";
+                             document.getElementById('status').innerText = "Session lost (Server restarted?). Refresh page.";
                              clearInterval(interval);
                         }
                     }, 2000);
@@ -186,7 +197,8 @@ def login_page():
 @app.get("/admin", response_class=HTMLResponse)
 def admin_dashboard():
     """
-    Shows a list of all login requests and allows the server admin to approve them.
+    Shows a list of all login requests and allows the admin to approve them
+    Mostly to delay the approval to simulate real-world usage
     """
     rows = ""
     for req in db.login_requests.values():
@@ -248,7 +260,8 @@ def admin_dashboard():
 
 @app.post("/admin/approve")
 def admin_approve(login_id: str = Form(...)):
-    AuthService.approve_login(login_id, user_id="server_admin")
+    # If admin approves, approve the login as "misc" user (this does not matter much for demo)
+    AuthService.approve_login(login_id, user_id="misc")
     return RedirectResponse(url="/admin", status_code=303)
 
 @app.get("/mobile-sim", response_class=HTMLResponse)
@@ -295,7 +308,7 @@ def mobile_sim_page(p: str):
                         }}
 
                         loginId = res.login_id;
-                        document.getElementById('status').innerText = "✅ Scanned! Waiting for Admin Approval...";
+                        document.getElementById('status').innerText = "Scanned! Waiting for Admin Approval...";
                         document.getElementById('status').className = "waiting";
 
                         // 2. Start Polling for Approval
@@ -316,7 +329,7 @@ def mobile_sim_page(p: str):
                             const data = await response.json();
 
                             if (data.status === 'AUTHORIZED') {{
-                                document.getElementById('status').innerHTML = "✅ APPROVED!<br>You can close this window.";
+                                document.getElementById('status').innerHTML = "APPROVED!<br>You can close this window.";
                                 document.getElementById('status').className = "success";
                                 clearInterval(interval);
                             }}
