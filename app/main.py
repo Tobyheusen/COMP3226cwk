@@ -215,7 +215,7 @@ def admin_dashboard():
                 </form>
             """
         elif status == "AUTHORIZED":
-            action_html = "<span style='color:green'>✅ Approved</span>"
+            action_html = "<span style='color:green'>Approved</span>"
         elif status == "PENDING":
              action_html = "<span style='color:gray'>Waiting for Scan...</span>"
         else:
