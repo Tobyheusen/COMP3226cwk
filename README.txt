@@ -38,3 +38,18 @@ python -m venv venv
 pip install -r requirements.txt
 $env:BASE_URL = "http://192.168.1.40:8000"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+http://localhost:8000/login
+
+
+
+
+--- TO DO ---
+
+- Mutual TLS (mTLS), we are using notmal HTTP standard
+- DBSC "Proof of Possession" hardware-protected key pair, we are using browser_key as a string in the JSON body
+- QR Payload Encryption, we are using signing no Encryption
+- Better Logging 
+- strict validation pipeline including length checks, schema validation, and safe parsing to prevent injection
+
+
