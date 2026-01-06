@@ -1,7 +1,7 @@
 # COMP3226 - QR Login Prototype
 
 This project is a **locally hosted QR-code login prototype** built with **Python** and **FastAPI**.
-It demonstrates **Device Bound Session Credentials (DBSC)** using hardware-protected key pairs (simulated via Web Crypto API) and **Proof of Possession**.
+It demonstrates **Device Bound Session Credentials (DBSC)** using hardware-protected key pairs and **Mutual TLS (mTLS)** for channel security.
 
 ## Prerequisites
 
@@ -26,32 +26,32 @@ It demonstrates **Device Bound Session Credentials (DBSC)** using hardware-prote
     pip install -r requirements.txt
     ```
 
-## Running the Application
+## Running with mTLS
 
-To ensure the features work correctly on physical devices (mobile phones), the application must run over **HTTPS**. We have provided a helper script to automate this.
+This application enforces **Mutual TLS (mTLS)**. Both the server and the client (browser/mobile) must authenticate using certificates.
 
-1.  Run the helper script:
+1.  Start the server:
     ```bash
     python run.py
     ```
 
     This script will:
-    - Generate self-signed SSL certificates (`cert.pem`, `key.pem`) if needed.
-    - Detect your LAN IP address.
-    - Start the server on `0.0.0.0:8000`.
+    - Automatically generate a **Root CA**, **Server Cert**, and **Client Cert** if they don't exist.
+    - Start the server on `0.0.0.0:8000` with mTLS enforced.
+    - Output the generated certificates in the current directory.
 
-2.  **Access from Desktop:**
-    - Look for the **LAN URL** printed in the console (e.g., `https://192.168.1.X:8000`).
-    - Open that URL in your browser.
-    - **Accept the security warning** (since the cert is self-signed).
+2.  **Import Client Certificate:**
+    - Locate the generated `client.p12` file.
+    - **Password:** `secret`
+    - **Desktop:** Import this file into your OS Keychain (macOS) or Browser Certificates (Windows/Chrome/Firefox).
+    - **Mobile:** Transfer this file to your phone and install it in Settings -> Security -> Install from storage.
 
-3.  **Scan with Mobile:**
-    - Click "Start Login" on the desktop.
-    - Scan the QR code with your mobile device.
-    - **Note:** Your mobile device must be on the **same Wi-Fi network**.
-    - If your mobile browser blocks the self-signed certificate, you may need to visit `https://<LAN_IP>:8000` on your mobile browser first to accept the warning.
+3.  **Access the Application:**
+    - Visit the **LAN URL** printed in the console (e.g., `https://192.168.1.X:8000`).
+    - Your browser will prompt you to select the "QR Login Client" certificate.
+    - Proceed past the self-signed certificate warning (or import `ca.crt` as a trusted root).
 
 ## Troubleshooting
 
-- **"Web Crypto API not available"**: Ensure you are using `https://` or `http://localhost`. HTTP on a LAN IP is NOT a Secure Context.
-- **"Could not connect to server"**: Ensure both devices are on the same network. Check your firewall settings.
+- **"Connection Reset" / "SSL Handshake Failed"**: This means your client did not present a valid certificate. Ensure `client.p12` is imported correctly.
+- **"Web Crypto API not available"**: Ensure you are using `https://`.
