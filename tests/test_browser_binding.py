@@ -18,6 +18,8 @@ import json
 import base64
 import urllib3
 import sys
+import os
+from pathlib import Path
 from jwcrypto import jwk
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -26,7 +28,13 @@ from cryptography.hazmat.primitives.serialization import load_pem_private_key
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 BASE_URL = "https://127.0.0.1:8000"
-CERT_PATH = ("../client.crt", "../client.key")
+
+
+_test_dir = Path(__file__).parent
+_project_root = _test_dir.parent
+_cert_crt = _project_root / "client.crt"
+_cert_key = _project_root / "client.key"
+CERT_PATH = (str(_cert_crt), str(_cert_key))
 
 
 @pytest.fixture(scope="module")
