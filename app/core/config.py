@@ -9,7 +9,8 @@ class SecurityMode(str, Enum):
 class Settings(BaseModel):
     # App Config
     APP_NAME: str = "QR Login Prototype"
-    SECURITY_MODE: SecurityMode = SecurityMode.SECURE
+    # Read from environment variable, default to SECURE
+    SECURITY_MODE: SecurityMode = SecurityMode(os.getenv("SECURITY_MODE", "secure").lower())
 
     # Secrets
     SECRET_KEY: str = "supersecretkey" 
