@@ -5,8 +5,7 @@ This test suite directly compares:
 1. Secure Mode WITH binding - demonstrates prevention of hijacking and replay
 2. Insecure Mode WITHOUT binding - demonstrates vulnerabilities
 
-These tests answer: "To what extent can binding QR tokens to browsers, sessions 
-and devices prevent authorisation hijacking and token replay?"
+"To what extent can binding QR tokens to browsers, sessions and devices prevent authorisation hijacking and token replay?"
 """
 
 import pytest
@@ -107,8 +106,8 @@ class TestWithBinding_SecureMode:
         print("✓ Authentication flow completed")
         
         # 3. Attacker intercepts login_id (e.g., from network traffic, XSS)
-        print(f"⚠️  Attacker intercepts login_id: {login_id}")
-        print("⚠️  Attacker attempts to exchange token WITHOUT browser's private key")
+        print(f"Attacker intercepts login_id: {login_id}")
+        print("Attacker attempts to exchange token WITHOUT browser's private key")
         
         # 4. Attacker tries to exchange token with wrong browser key
         attacker_priv_pem = attacker_key_pair.export_to_pem(private_key=True, password=None)
@@ -397,8 +396,8 @@ class TestWithoutBinding_InsecureMode:
         print("✓ Legitimate QR code scan completed")
         
         # 3. Attacker captures and replays QR code
-        print("⚠️  Attacker captures QR code payload")
-        print("⚠️  Attacker attempts to replay the same QR code")
+        print("Attacker captures QR code payload")
+        print("Attacker attempts to replay the same QR code")
         
         replay_scan = requests.post(
             f"{BASE_URL}/auth/scan",
@@ -413,7 +412,7 @@ class TestWithoutBinding_InsecureMode:
             print("  - Nonce-based protection not enforced")
             print("  - Attacker can reuse captured QR codes")
         else:
-            print("⚠️  Replay blocked (may depend on status checks, not nonce)")
+            print("  - Replay blocked (may depend on status checks, not nonce)")
             print("  - But nonce tracking is disabled in insecure mode")
         
         print("=" * 70)

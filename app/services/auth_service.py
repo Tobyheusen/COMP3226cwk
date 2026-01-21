@@ -133,6 +133,13 @@ class AuthService:
             logger.warning(f"Status check failed: login_id={login_id} not found")
             return {"status": "NOT_FOUND"}
 
+        # Check if token has expired (for PENDING tokens)
+        if request["status"] == "PENDING":
+            created_at = request["created_at"]
+            if datetime.utcnow() - created_at > timedelta(seconds=settings.token_lifetime):
+                request["status"] = "EXPIRED"
+                logger.info(f"Token expired during status check: login_id={login_id}")
+
         if request["status"] == "AUTHORIZED":
             # In Secure Mode, do not return session_token here.
             # Client must prove possession of the key.

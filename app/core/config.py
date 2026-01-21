@@ -22,6 +22,14 @@ class Settings(BaseModel):
     # Configuration toggles based on Security Mode
     @property
     def token_lifetime(self) -> int:
+        # Allow override via environment variable for testing
+        env_lifetime = os.getenv("TOKEN_LIFETIME")
+        if env_lifetime:
+            try:
+                return int(env_lifetime)
+            except ValueError:
+                pass
+        
         if self.SECURITY_MODE == SecurityMode.INSECURE:
             return 3600  # insecure mode
         return 60  # secure mode
