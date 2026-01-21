@@ -42,8 +42,7 @@ def browser_key_pair():
 
 def _safe_json(resp: requests.Response) -> dict:
     """
-    FIX: Avoid crashing if the server returns non-JSON (e.g., HTML error page).
-    We treat non-JSON as empty dict so tests can raise more meaningful assertions.
+    Parse a JSON response and return an empty dict on parse failure.
     """
     try:
         return resp.json()
@@ -53,12 +52,8 @@ def _safe_json(resp: requests.Response) -> dict:
 
 def _poll_status(login_id: str) -> str:
     """
-    FIX: Centralize polling logic & normalize outputs.
-
-    Why:
-    - Some implementations return 404 for unknown IDs.
-    - Some return 200 with {"status": "NOT_FOUND"}.
-    This helper makes brute-force tests consistent across implementations.
+    Poll the server for login status and normalise outputs across responses.
+    Returns a single uppercase status string for consistent test assertions.
     """
     try:
         resp = requests.get(
@@ -80,10 +75,8 @@ def _poll_status(login_id: str) -> str:
 
 def _is_low_entropy_numeric_id(login_id: str, max_digits: int = 6) -> bool:
     """
-    Helper: Detect if insecure mode is using a guessable numeric ID space.
-
-    If login_id is purely digits and short (<= 6 digits), brute force becomes
-    demonstrably feasible, which strengthens your RQ2 evaluation.
+    Detect whether a login_id is a short, numeric identifier.
+    Used to gate the optional low-entropy brute-force demo.
     """
     return login_id.isdigit() and len(login_id) <= max_digits
 
@@ -107,10 +100,8 @@ class TestShortLifespanTokens:
         """
         RQ2: Short Lifespan Token Expiry
 
-        FIX: Now robust against where expiry is enforced.
-        - Some backends mark EXPIRED during poll.
-        - Others only mark EXPIRED when scan is attempted.
-        This test now allows both, as long as token becomes unusable after TTL.
+        Confirms a token becomes unusable after the short lifespan window,
+        regardless of whether expiry is enforced on poll or scan.
         """
         print("\n=== TEST: Short Lifespan Token Expiry (60s) ===")
 
@@ -156,9 +147,8 @@ class TestShortLifespanTokens:
         """
         RQ2: Brute-Force Attack Limited by Short Lifespan
 
-        FIX: Uses specific exceptions and robust poll helper.
-        The conclusion is not "brute force succeeds", but:
-        - Short lifespan caps max online guesses possible within the window.
+        Measures the number of online guesses possible within the short window
+        and verifies that random guessing does not find a valid token.
         """
         print("\n=== TEST: Brute-Force Attack vs Short Lifespan (60s) ===")
 
@@ -322,11 +312,8 @@ class TestLongLifespanTokens:
         """
         RQ2: Brute-Force window comparison (core measurable result)
 
-        FIX: Adds an assertion proving the measurable claim:
-        - Long lifespan allows ~60x more online guesses than short lifespan
-          at the same request rate.
-
-        This avoids implying brute-force "succeeds" against UUID-scale IDs.
+        Estimates the request rate and asserts the long window allows ~60x
+        more online guesses than the short window.
         """
         print("\n=== TEST: Window Ratio vs Brute Force (3600s vs 60s) ===")
 
@@ -426,6 +413,8 @@ class TestLongLifespanTokens:
 
     def test_optional_low_entropy_bruteforce_demo(self, browser_key_pair):
         """
+        Optional demonstration where low-entropy numeric IDs make brute force
+        practically feasible within the long lifespan window.
 
         If insecure mode uses low-entropy numeric login IDs (e.g., <= 6 digits),
         brute-force can become practically feasible within a long lifespan.
@@ -456,7 +445,7 @@ class TestLongLifespanTokens:
         target = int(login_id)
         width = len(login_id)
 
-        # Brute force sequentially for a short time; if the space is small, we should hit quickly.
+        # Brute force sequentially for a short time; small spaces should be guessable quickly.
         start = time.time()
         timeout = 5.0
         found = False
