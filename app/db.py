@@ -18,4 +18,10 @@ class InMemoryDB:
         # nonce tracking for replay protection (login_id + nonce)
         self.used_nonces: set = set()
 
+        # insecure login id counter (low-entropy demo)
+        self.insecure_login_counter: int = 0
+
+        # rate limiting storage: key -> list of timestamps
+        self.rate_limit_log: Dict[str, list] = {}
+
 db = InMemoryDB()

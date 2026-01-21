@@ -1,13 +1,40 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
+import time
 from pydantic import BaseModel
 from app.services.auth_service import AuthService
 from app.services.qr_service import QRService
 from app.core.config import settings
+from app.db import db
 import urllib.parse
 """
 Auth handles the QR code data and calls auth_service methods to process the login activities etc
 """
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+def _enforce_rate_limit(request: Request, key_suffix: str) -> None:
+    """
+    Simple in-memory rate limiter for demo/testing.
+    Applies only when rate limiting is enabled in secure mode.
+    """
+    if not settings.rate_limit_enabled:
+        return
+
+    client_ip = request.client.host if request.client else "unknown"
+    key = f"{client_ip}:{key_suffix}"
+    now = time.time()
+
+    window = max(1, settings.RATE_LIMIT_WINDOW_SECONDS)
+    max_requests = max(1, settings.RATE_LIMIT_MAX_REQUESTS)
+
+    timestamps = db.rate_limit_log.get(key, [])
+    # Keep only timestamps within the window
+    timestamps = [t for t in timestamps if now - t <= window]
+
+    if len(timestamps) >= max_requests:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+
+    timestamps.append(now)
+    db.rate_limit_log[key] = timestamps
 
 class InitLoginRequest(BaseModel):
     browser_key: str = None  # For DBSC
@@ -106,10 +133,11 @@ def approve_login(request: ApproveLoginRequest):
     raise HTTPException(status_code=400, detail="Approval Failed")
 
 @router.get("/poll/{login_id}")
-def poll_login(login_id: str):
+def poll_login(login_id: str, request: Request):
     """
     Called by the browser to check status.
     """
+    _enforce_rate_limit(request, "poll")
     return AuthService.get_login_status(login_id)
 
 @router.post("/token")

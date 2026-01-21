@@ -16,6 +16,24 @@ logger = logging.getLogger(__name__)
 
 class AuthService:
     @staticmethod
+    def _next_insecure_login_id() -> str:
+        """
+        Generates a low-entropy numeric login_id for insecure demo mode.
+        This makes brute-force feasible for demonstration purposes.
+        """
+        digits = settings.insecure_login_id_digits
+        max_value = 10 ** digits
+
+        # Try up to max_value times to avoid collisions
+        for _ in range(max_value):
+            candidate = str(db.insecure_login_counter % max_value).zfill(digits)
+            db.insecure_login_counter += 1
+            if candidate not in db.login_requests:
+                return candidate
+
+        raise RuntimeError("No available insecure login_id values")
+
+    @staticmethod
     def initiate_login(browser_key: str = None) -> dict:
         """
         Creates a new login request.
@@ -26,7 +44,10 @@ class AuthService:
             logger.warning("Login initiation rejected: Missing browser_key in Secure Mode")
             raise ValueError("Browser key is required in Secure Mode")
 
-        login_id = str(uuid.uuid4())
+        if settings.use_low_entropy_login_ids:
+            login_id = AuthService._next_insecure_login_id()
+        else:
+            login_id = str(uuid.uuid4())
         browser_sid = secrets.token_hex(16)
         qr_nonce = secrets.token_hex(16)
 
