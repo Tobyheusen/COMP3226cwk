@@ -10,7 +10,7 @@ class Settings(BaseModel):
     # App Config
     APP_NAME: str = "QR Login Prototype"
     # Read from environment variable, default to SECURE
-    SECURITY_MODE: SecurityMode = SecurityMode(os.getenv("SECURITY_MODE", "secure").lower())
+    SECURITY_MODE: SecurityMode = SecurityMode(os.getenv("SECURITY_MODE", "insecure").lower())
 
     # Secrets
     SECRET_KEY: str = "supersecretkey" 

@@ -1,43 +1,57 @@
-# File: COMP3226CWK/run_mtls.py
-import uvicorn
-import ssl
 import os
 import sys
+import ssl
+import uvicorn
+import gen_mtls
 
 def main():
-    # Configuration
-    HOST = "127.0.0.1"
-    PORT = 8000
+    # --- CONFIGURATION ---
+    # Set this to False to allow phones to connect WITHOUT a client certificate
+    # Set this to True to enforce strict mTLS security
+    ENFORCE_MTLS = True  
+    # ---------------------
+
+    # 1. Ensure Certs Exist & Get IP
+    gen_mtls.generate_certs()
+    lan_ip = gen_mtls.get_lan_ip()
+    port = 8000
     
-    # SSL Paths
-    SERVER_CERT = "server.crt"
-    SERVER_KEY = "server.key"
-    CA_CERT = "ca.crt"
+    # 2. Setup Paths
+    ca_cert = "ca.crt"
+    server_cert = "server.crt"
+    server_key = "server.key"
 
-    # Check if certs exist
-    if not os.path.exists(SERVER_CERT) or not os.path.exists(CA_CERT):
-        print("❌ Certificates not found in root directory!")
-        print("   Please run 'python gen_mtls.py' first.")
-        sys.exit(1)
+    # 3. Determine SSL Mode
+    if ENFORCE_MTLS:
+        ssl_mode = ssl.CERT_REQUIRED  # Strict: Reject anyone without a cert
+        mode_name = "SECURE (mTLS)"
+    else:
+        ssl_mode = ssl.CERT_NONE      # Standard HTTPS: Anyone can connect
+        mode_name = "STANDARD HTTPS (No Client Cert)"
 
+    # 4. Print Status
+    url = f"https://{lan_ip}:{port}"
     print("\n" + "="*60)
-    print(f"🔐 STARTING SECURE mTLS SERVER")
-    print(f"URL:     https://{HOST}:{PORT}")
+    print(f"SERVER STARTING: {mode_name}")
+    print(f"URL:      {url}")
     print("-" * 60)
-    print("🔒 SECURITY: Client Certificate REQUIRED")
-    print("   Browsers without 'client.p12' will be rejected.")
-    print("   Scripts without 'client.crt'/'client.key' will fail.")
+    
+    if ENFORCE_MTLS:
+        print("SECURITY: LOCKED. Client Certificate ('client.p12') REQUIRED.")
+    else:
+        print("SECURITY: OPEN. Devices can connect using standard HTTPS.")
+        print("          (You will still see browser security warnings due to self-signed certs)")
     print("="*60 + "\n")
 
-    # Start Uvicorn with SSL Context
+    # 5. Run Uvicorn
     uvicorn.run(
         "app.main:app",
-        host=HOST,
-        port=PORT,
-        ssl_keyfile=SERVER_KEY,
-        ssl_certfile=SERVER_CERT,
-        ssl_ca_certs=CA_CERT,
-        ssl_cert_reqs=ssl.CERT_REQUIRED,  # <--- CRITICAL: Enforces mTLS
+        host="0.0.0.0",
+        port=port,
+        ssl_keyfile=server_key,
+        ssl_certfile=server_cert,
+        ssl_ca_certs=ca_cert if ENFORCE_MTLS else None, # CA cert is only needed if verifying clients
+        ssl_cert_reqs=ssl_mode,   # <--- The dynamic fix
         reload=True
     )
 

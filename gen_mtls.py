@@ -76,7 +76,6 @@ def generate_certs():
     # Generates server identity
     sans = [
         x509.DNSName(u"localhost"),
-        x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
         x509.IPAddress(ipaddress.IPv4Address(lan_ip))
     ]
 

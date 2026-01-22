@@ -44,6 +44,6 @@ This will enforce **Mutual TLS (mTLS)** Both the server and the client (browser/
     - Click the QR one the self-signed certificate warning (or import "ca.crt" as a trusted root, same process to do this as above)
 
 
-!!!!!!!!!!!!!!!!!!! YOU NEED TO BE ON A PRIVATE NETWORK< WITH BOTH DEVICES ON THE SAME ONE NETWORK !!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!! YOU NEED TO BE ON A PRIVATE NETWORK <WITH BOTH DEVICES ON THE SAME ONE NETWORK> !!!!!!!!!!!!!!!!!!
 
 
