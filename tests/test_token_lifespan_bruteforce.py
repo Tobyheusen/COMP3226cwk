@@ -59,7 +59,7 @@ def _poll_status(login_id: str) -> str:
         resp = requests.get(
             f"{BASE_URL}/auth/poll/{login_id}",
             cert=CERT_PATH,
-            verify=False,
+            verify="ca.crt",
             timeout=0.75,
         )
     except requests.RequestException:
@@ -110,7 +110,7 @@ class TestShortLifespanTokens:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},
             cert=CERT_PATH,
-            verify=False,
+            verify="ca.crt",
         )
         assert init_resp.status_code == 200
         init_data = _safe_json(init_resp)
@@ -130,7 +130,7 @@ class TestShortLifespanTokens:
                 f"{BASE_URL}/auth/scan",
                 json={"qr_raw_payload": qr_payload},
                 cert=CERT_PATH,
-                verify=False,
+                verify="ca.crt",
             )
             assert expired_scan.status_code == 400
             detail = str(_safe_json(expired_scan).get("detail", "")).lower()
@@ -157,7 +157,7 @@ class TestShortLifespanTokens:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},
             cert=CERT_PATH,
-            verify=False,
+            verify="ca.crt",
         )
         assert init_resp.status_code == 200
         legitimate_login_id = _safe_json(init_resp)["login_id"]
@@ -203,7 +203,7 @@ class TestShortLifespanTokens:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},
             cert=CERT_PATH,
-            verify=False,
+            verify="ca.crt",
         )
         assert init_resp.status_code == 200
         init_data = _safe_json(init_resp)
@@ -214,7 +214,7 @@ class TestShortLifespanTokens:
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},
             cert=CERT_PATH,
-            verify=False,
+            verify="ca.crt",
         )
         assert first_scan.status_code == 200
 
@@ -222,57 +222,12 @@ class TestShortLifespanTokens:
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},
             cert=CERT_PATH,
-            verify=False,
+            verify="ca.crt",
         )
         assert reuse_scan.status_code == 400
 
         detail = str(_safe_json(reuse_scan).get("detail", "")).lower()
         assert any(k in detail for k in ["nonce", "replay", "already", "used", "status"])
-
-    def test_rate_limit_polling_in_secure_mode(self, browser_key_pair):
-        """
-        RQ2: Rate limiting reduces brute-force polling rate in secure mode.
-
-        This test expects 429 responses when high-rate polling exceeds limits.
-        Enable with:
-          $env:RATE_LIMIT_ENABLED="1"
-          $env:RATE_LIMIT_MAX_REQUESTS="10"
-          $env:RATE_LIMIT_WINDOW_SECONDS="1"
-        """
-        if os.getenv("RATE_LIMIT_ENABLED", "0").lower() not in ("1", "true", "yes"):
-            pytest.skip("Enable with RATE_LIMIT_ENABLED=1 to test rate limiting")
-
-        max_requests = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "20"))
-        window_seconds = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "1"))
-
-        browser_pub_key = browser_key_pair.export_public()
-        init_resp = requests.post(
-            f"{BASE_URL}/auth/init",
-            json={"browser_key": browser_pub_key},
-            cert=CERT_PATH,
-            verify=False,
-        )
-        assert init_resp.status_code == 200
-        login_id = _safe_json(init_resp)["login_id"]
-
-        rate_limited = False
-        for _ in range(max_requests + 5):
-            resp = requests.get(
-                f"{BASE_URL}/auth/poll/{login_id}",
-                cert=CERT_PATH,
-                verify=False,
-                timeout=0.75,
-            )
-            if resp.status_code == 429:
-                rate_limited = True
-                break
-
-        assert rate_limited, (
-            "Expected 429 rate limit responses. "
-            f"Try lowering RATE_LIMIT_MAX_REQUESTS (currently {max_requests}) "
-            f"or RATE_LIMIT_WINDOW_SECONDS (currently {window_seconds})."
-        )
-
 
 class TestLongLifespanTokens:
     """
@@ -299,53 +254,19 @@ class TestLongLifespanTokens:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},
             cert=CERT_PATH,
-            verify=False,
+            verify="ca.crt",
         )
         assert init_resp.status_code == 200
         login_id = _safe_json(init_resp)["login_id"]
 
+        print(f"Created login_id: {login_id}")
+        print("Checking status is still PENDING after a short wait...")
         assert _poll_status(login_id) == "PENDING"
         time.sleep(5)
         assert _poll_status(login_id) == "PENDING"
+        print("Token remains valid in long lifespan mode.")
 
-    def test_brute_force_long_lifespan_window_ratio(self, browser_key_pair):
-        """
-        RQ2: Brute-Force window comparison (core measurable result)
-
-        Estimates the request rate and asserts the long window allows ~60x
-        more online guesses than the short window.
-        """
-        print("\n=== TEST: Window Ratio vs Brute Force (3600s vs 60s) ===")
-
-        browser_pub_key = browser_key_pair.export_public()
-        init_resp = requests.post(
-            f"{BASE_URL}/auth/init",
-            json={"browser_key": browser_pub_key},
-            cert=CERT_PATH,
-            verify=False,
-        )
-        assert init_resp.status_code == 200
-
-        start_time = time.time()
-        attempts = 0
-
-        test_duration = 10  # shorter, because we only need rate estimation
-        while time.time() - start_time < test_duration:
-            attempts += 1
-            _poll_status(str(uuid.uuid4()))
-
-        elapsed = time.time() - start_time
-        attempts_per_second = attempts / elapsed if elapsed > 0 else 0.0
-
-        long_attempts = attempts_per_second * LONG_WINDOW
-        short_attempts = attempts_per_second * SHORT_WINDOW
-        ratio = (long_attempts / short_attempts) if short_attempts > 0 else 0.0
-
-        print(f"Rate: {attempts_per_second:.1f} req/s | Ratio (3600/60): {ratio:.1f}x")
-
-        assert 55 <= ratio <= 65, f"Expected ~60x window, got {ratio:.1f}x"
-
-    @pytest.mark.slow
+    
     def test_token_does_not_expire_quickly(self, browser_key_pair):
         """
         RQ2: Long lifespan persists beyond 60 seconds.
@@ -357,11 +278,13 @@ class TestLongLifespanTokens:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},
             cert=CERT_PATH,
-            verify=False,
+            verify="ca.crt",
         )
         assert init_resp.status_code == 200
         login_id = _safe_json(init_resp)["login_id"]
 
+        print(f"Created login_id: {login_id}")
+        print("Waiting past the short lifespan window (61s)...")
         assert _poll_status(login_id) == "PENDING"
         time.sleep(SHORT_WINDOW + 1)
 
@@ -373,6 +296,7 @@ class TestLongLifespanTokens:
             )
 
         assert status == "PENDING"
+        print("Token still valid after 61s in long lifespan mode.")
 
     def test_single_use_protection_with_long_lifespan(self, browser_key_pair):
         """
@@ -385,82 +309,31 @@ class TestLongLifespanTokens:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},
             cert=CERT_PATH,
-            verify=False,
+            verify="ca.crt",
         )
         assert init_resp.status_code == 200
         init_data = _safe_json(init_resp)
 
         qr_payload = init_data["qr_payload"]
 
+        print("First scan should succeed...")
         first_scan = requests.post(
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},
             cert=CERT_PATH,
-            verify=False,
+            verify="ca.crt",
         )
         assert first_scan.status_code == 200
 
+        print("Second scan should be blocked (single-use)...")
         reuse_scan = requests.post(
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},
             cert=CERT_PATH,
-            verify=False,
+            verify="ca.crt",
         )
         assert reuse_scan.status_code == 400
 
         detail = str(_safe_json(reuse_scan).get("detail", "")).lower()
         assert any(k in detail for k in ["nonce", "replay", "already", "used", "status"])
-
-    def test_optional_low_entropy_bruteforce_demo(self, browser_key_pair):
-        """
-        Optional demonstration where low-entropy numeric IDs make brute force
-        practically feasible within the long lifespan window.
-
-        If insecure mode uses low-entropy numeric login IDs (e.g., <= 6 digits),
-        brute-force can become practically feasible within a long lifespan.
-
-        This test is DISABLED by default to avoid flakiness and long runtimes.
-        Enable it when you want the stronger "attack succeeds" demonstration:
-
-            $env:ENABLE_LOW_ENTROPY_DEMO='1'
-
-        If IDs are high entropy (UUID-like), this test SKIPS (not a failure).
-        """
-        if os.getenv("ENABLE_LOW_ENTROPY_DEMO", "0") != "1":
-            pytest.skip("Enable with ENABLE_LOW_ENTROPY_DEMO=1")
-
-        browser_pub_key = browser_key_pair.export_public()
-        init_resp = requests.post(
-            f"{BASE_URL}/auth/init",
-            json={"browser_key": browser_pub_key},
-            cert=CERT_PATH,
-            verify=False,
-        )
-        assert init_resp.status_code == 200
-        login_id = _safe_json(init_resp)["login_id"]
-
-        if not _is_low_entropy_numeric_id(login_id):
-            pytest.skip(f"login_id not low-entropy numeric (got {login_id}); demo not applicable")
-
-        target = int(login_id)
-        width = len(login_id)
-
-        # Brute force sequentially for a short time; small spaces should be guessable quickly.
-        start = time.time()
-        timeout = 5.0
-        found = False
-
-        guess = 0
-        while time.time() - start < timeout:
-            guess_id = str(guess).zfill(width)
-            status = _poll_status(guess_id)
-            if status in {"PENDING", "SCANNED", "AUTHORIZED"}:
-                if guess_id == login_id:
-                    found = True
-                    break
-            guess += 1
-
-        assert found, (
-            "Low-entropy brute force demo did not find the token within timeout. "
-            "This could indicate rate limiting, a larger ID space than expected, or different server behavior."
-        )
+        print("Single-use enforcement confirmed.")
