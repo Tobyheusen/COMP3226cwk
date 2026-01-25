@@ -74,10 +74,10 @@ class TestWithBinding_SecureMode:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         assert init_resp.status_code == 200, "Login initiation failed"
-        print("✓ Legitimate user initiated login with browser key")
+        print("Legitimate user initiated login with browser key")
         
         login_id = init_resp.json()["login_id"]
         qr_payload = init_resp.json()["qr_payload"]
@@ -87,23 +87,23 @@ class TestWithBinding_SecureMode:
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         
         approve_resp = requests.post(
             f"{BASE_URL}/admin/approve",
             data={"login_id": login_id},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         if approve_resp.status_code == 404:
             requests.post(
                 f"{BASE_URL}/auth/approve",
                 json={"login_id": login_id, "user_id": "test_user"},
                 cert=CERT_PATH,
-                verify=False
+                verify="ca.crt"
             )
-        print("✓ Authentication flow completed")
+        print("Authentication flow completed")
         
         # 3. Attacker intercepts login_id (e.g., from network traffic, XSS)
         print(f"Attacker intercepts login_id: {login_id}")
@@ -124,7 +124,7 @@ class TestWithBinding_SecureMode:
             f"{BASE_URL}/auth/token",
             json={"login_id": login_id, "signature": attacker_sig_b64},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         
         # 5. VERIFICATION: Attack should FAIL - binding prevents hijacking
@@ -136,7 +136,7 @@ class TestWithBinding_SecureMode:
             "signature", "invalid", "proof", "possession"
         ]), f"Error should indicate signature verification failed, got: {error_detail}"
         
-        print("✓ RESULT: Authorisation hijacking PREVENTED by binding")
+        print("RESULT: Authorisation hijacking PREVENTED by binding")
         print("  - Attacker cannot exchange token without correct browser key")
         print("  - Proof of possession requirement blocks the attack")
         print("=" * 70)
@@ -156,10 +156,10 @@ class TestWithBinding_SecureMode:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         assert init_resp.status_code == 200
-        print("✓ Legitimate user initiated login")
+        print("Legitimate user initiated login")
         
         qr_payload = init_resp.json()["qr_payload"]
         login_id = init_resp.json()["login_id"]
@@ -169,21 +169,21 @@ class TestWithBinding_SecureMode:
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         assert first_scan.status_code == 200, "First scan should succeed"
-        print("✓ Legitimate QR code scan completed")
+        print("Legitimate QR code scan completed")
         
         # 3. Attacker captures QR code payload (e.g., network interception, screenshot)
-        print(f"⚠️  Attacker captures QR code payload")
-        print("⚠️  Attacker attempts to replay the same QR code")
+        print(f"Attacker captures QR code payload")
+        print("Attacker attempts to replay the same QR code")
         
         # 4. Attacker tries to replay the QR code
         replay_scan = requests.post(
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},  # Same payload
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         
         # 5. VERIFICATION: Replay should FAIL - nonce tracking prevents replay
@@ -195,7 +195,7 @@ class TestWithBinding_SecureMode:
             "nonce", "replay", "status", "already", "used"
         ]), f"Error should indicate replay detected, got: {error_detail}"
         
-        print("✓ RESULT: Token replay PREVENTED by binding")
+        print("RESULT: Token replay PREVENTED by binding")
         print("  - Nonce-based protection tracks used QR codes")
         print("  - Replay attempt detected and blocked")
         print("=" * 70)
@@ -215,7 +215,7 @@ class TestWithBinding_SecureMode:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         assert init_resp.status_code == 200
         
@@ -226,31 +226,31 @@ class TestWithBinding_SecureMode:
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         
         approve_resp = requests.post(
             f"{BASE_URL}/admin/approve",
             data={"login_id": login_id},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         if approve_resp.status_code == 404:
             requests.post(
                 f"{BASE_URL}/auth/approve",
                 json={"login_id": login_id, "user_id": "test_user"},
                 cert=CERT_PATH,
-                verify=False
+                verify="ca.crt"
             )
-        print("✓ Authentication flow completed")
+        print("Authentication flow completed")
         
         # 2. Attacker polls for status (trying to get token)
-        print("⚠️  Attacker polls /auth/poll endpoint to steal session token")
+        print("Attacker polls /auth/poll endpoint to steal session token")
         
         poll_resp = requests.get(
             f"{BASE_URL}/auth/poll/{login_id}",
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         assert poll_resp.status_code == 200
         
@@ -260,7 +260,7 @@ class TestWithBinding_SecureMode:
         assert "session_token" not in poll_data, \
             "SECURITY FAILURE: Token leaked in poll response! Binding should prevent this."
         
-        print("✓ RESULT: Token leakage PREVENTED by binding")
+        print("RESULT: Token leakage PREVENTED by binding")
         print("  - Session token not exposed in poll responses")
         print("  - Token only available after proof of possession")
         print("=" * 70)
@@ -282,7 +282,7 @@ class TestWithoutBinding_InsecureMode:
         if current_mode != "insecure":
             pytest.skip(f"These tests require SECURITY_MODE=insecure, got {current_mode}")
     
-    def test_authorisation_hijacking_possible_without_binding(self, browser_key_pair, attacker_key_pair):
+    def test_authorisation_hijacking_without_binding(self, browser_key_pair, attacker_key_pair):
         """
         RQ1: Authorisation Hijacking WITHOUT Binding
         
@@ -297,10 +297,10 @@ class TestWithoutBinding_InsecureMode:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},  # Optional, not enforced
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         assert init_resp.status_code == 200
-        print("✓ User initiated login (browser key not enforced)")
+        print("User initiated login (browser key not enforced)")
         
         login_id = init_resp.json()["login_id"]
         qr_payload = init_resp.json()["qr_payload"]
@@ -310,39 +310,39 @@ class TestWithoutBinding_InsecureMode:
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         
         approve_resp = requests.post(
             f"{BASE_URL}/admin/approve",
             data={"login_id": login_id},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         if approve_resp.status_code == 404:
             requests.post(
                 f"{BASE_URL}/auth/approve",
                 json={"login_id": login_id, "user_id": "test_user"},
                 cert=CERT_PATH,
-                verify=False
+                verify="ca.crt"
             )
-        print("✓ Authentication flow completed")
+        print("Authentication flow completed")
         
         # 3. Attacker intercepts login_id
-        print(f"⚠️  Attacker intercepts login_id: {login_id}")
-        print("⚠️  Attacker attempts token exchange WITHOUT browser's private key")
+        print(f"Attacker intercepts login_id: {login_id}")
+        print("Attacker attempts token exchange WITHOUT browser's private key")
         
         # 4. In insecure mode, token might be available via poll
         poll_resp = requests.get(
             f"{BASE_URL}/auth/poll/{login_id}",
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         poll_data = poll_resp.json()
         
         # 5. VERIFICATION: Token is LEAKED in insecure mode
         if "session_token" in poll_data:
-            print("✗ VULNERABILITY: Session token leaked in poll response!")
+            print("VULNERABILITY: Session token leaked in poll response!")
             print("  - Attacker can obtain token without proof of possession")
             print("  - No binding protection = hijacking possible")
         else:
@@ -352,14 +352,14 @@ class TestWithoutBinding_InsecureMode:
                 f"{BASE_URL}/auth/token",
                 json={"login_id": login_id, "signature": fake_sig},
                 cert=CERT_PATH,
-                verify=False
+                verify="ca.crt"
             )
             
             if token_resp.status_code == 200:
-                print("✗ VULNERABILITY: Token exchange succeeded with invalid signature!")
+                print("VULNERABILITY: Token exchange succeeded with invalid signature!")
                 print("  - No signature verification = hijacking possible")
             else:
-                print("⚠️  Token endpoint still requires signature (implementation dependent)")
+                print("Token endpoint still requires signature (implementation dependent)")
         
         print("=" * 70)
     
@@ -378,10 +378,10 @@ class TestWithoutBinding_InsecureMode:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         assert init_resp.status_code == 200
-        print("✓ User initiated login")
+        print("User initiated login")
         
         qr_payload = init_resp.json()["qr_payload"]
         
@@ -390,10 +390,10 @@ class TestWithoutBinding_InsecureMode:
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         assert first_scan.status_code == 200
-        print("✓ Legitimate QR code scan completed")
+        print("Legitimate QR code scan completed")
         
         # 3. Attacker captures and replays QR code
         print("Attacker captures QR code payload")
@@ -403,17 +403,16 @@ class TestWithoutBinding_InsecureMode:
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         
         # 4. VERIFICATION: In insecure mode, replay might succeed
         if replay_scan.status_code == 200:
-            print("✗ VULNERABILITY: QR code replay succeeded!")
+            print("VULNERABILITY: QR code replay succeeded!")
             print("  - Nonce-based protection not enforced")
             print("  - Attacker can reuse captured QR codes")
         else:
-            print("  - Replay blocked (may depend on status checks, not nonce)")
-            print("  - But nonce tracking is disabled in insecure mode")
+            print("  - Replay blocked ")
         
         print("=" * 70)
     
@@ -432,7 +431,7 @@ class TestWithoutBinding_InsecureMode:
             f"{BASE_URL}/auth/init",
             json={"browser_key": browser_pub_key},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         assert init_resp.status_code == 200
         
@@ -443,23 +442,23 @@ class TestWithoutBinding_InsecureMode:
             f"{BASE_URL}/auth/scan",
             json={"qr_raw_payload": qr_payload},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         
         approve_resp = requests.post(
             f"{BASE_URL}/admin/approve",
             data={"login_id": login_id},
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         if approve_resp.status_code == 404:
             requests.post(
                 f"{BASE_URL}/auth/approve",
                 json={"login_id": login_id, "user_id": "test_user"},
                 cert=CERT_PATH,
-                verify=False
+                verify="ca.crt"
             )
-        print("✓ Authentication flow completed")
+        print("Authentication flow completed")
         
         # 2. Poll for status
         print("Attacker polls /auth/poll endpoint")
@@ -467,7 +466,7 @@ class TestWithoutBinding_InsecureMode:
         poll_resp = requests.get(
             f"{BASE_URL}/auth/poll/{login_id}",
             cert=CERT_PATH,
-            verify=False
+            verify="ca.crt"
         )
         assert poll_resp.status_code == 200
         
@@ -475,7 +474,7 @@ class TestWithoutBinding_InsecureMode:
         
         # 3. VERIFICATION: Token is LEAKED in insecure mode
         if "session_token" in poll_data:
-            print("✗ VULNERABILITY: Session token leaked in poll response!")
+            print("VULNERABILITY: Session token leaked in poll response!")
             print(f"  - Token exposed: {poll_data['session_token'][:20]}...")
             print("  - No proof of possession required")
             print("  - Attacker can steal session without browser key")
