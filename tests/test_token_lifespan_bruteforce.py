@@ -2,9 +2,9 @@
 RQ2 Comparative Tests: Single-Use Tokens with Different Lifespans vs Brute-Force Attacks
 
 This test suite directly compares:
-1. Short Lifespan Tokens (60s) - demonstrates brute-force resistance
-2. Long Lifespan Tokens (3600s) - demonstrates vulnerability to brute-force
-3. Single-use protection (nonce tracking) - prevents token reuse
+- Short Lifespan Tokens (60s) - demonstrates brute-force resistance
+- Long Lifespan Tokens (3600s) - demonstrates vulnerability to brute-force
+- Single-use protection (nonce tracking) - prevents token reuse
 
 These tests answer: "How effectively do single-use tokens with shorter lifespans 
 prevent brute-force attacks, especially in comparison to current implementations?"
@@ -181,7 +181,7 @@ class TestShortLifespanTokens:
                 break
 
             if attempts % 250 == 0:
-                print(f"  Progress: {attempts} attempts, {SHORT_WINDOW - elapsed:.1f}s remaining")
+                print(f"Progress: {attempts} attempts, {SHORT_WINDOW - elapsed:.1f}s remaining")
 
         elapsed_time = time.time() - start_time
         print(f"Attack completed: {attempts} attempts in {elapsed_time:.1f}s")

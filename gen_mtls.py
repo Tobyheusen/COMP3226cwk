@@ -20,12 +20,12 @@ CLIENT_P12 = "client.p12"
 P12_PASSWORD = b"secret" # Simple password for import
 
 """
-This script generates mTLS certificates for secure communication
+script generates mTLS certificates for secure communication
 """
 
 def get_lan_ip():
     try:
-        # Try to find your ip
+        # Try to find ip
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
@@ -72,8 +72,7 @@ def generate_certs():
     server_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     lan_ip = get_lan_ip()
 
-    # localhost, 127.0.0.1, ip
-    # Generates server identity
+    # Generate server identity
     sans = [
         x509.DNSName(u"localhost"),
         x509.IPAddress(ipaddress.IPv4Address(lan_ip))
@@ -129,7 +128,7 @@ def generate_certs():
     with open(CLIENT_CERT, "wb") as f:
         f.write(client_cert.public_bytes(serialization.Encoding.PEM))
 
-    # Package Client P12, takes the Client's Private Key and the Client's Public Certificate and bundles them into a single file
+    # Package Client P12, takes the Client's Private Key and the Client's Public Certificate and puts them into a single file
     print("- Packaging client.p12...")
     p12 = pkcs12.serialize_key_and_certificates(
         name=b"QR Login Client",
