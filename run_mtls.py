@@ -51,7 +51,7 @@ def main():
         ssl_keyfile=server_key,
         ssl_certfile=server_cert,
         ssl_ca_certs=ca_cert if ENFORCE_MTLS else None, # CA cert is only needed if verifying clients
-        ssl_cert_reqs=ssl_mode,   # <--- The dynamic fix
+        ssl_cert_reqs=ssl_mode,
         reload=True
     )
 

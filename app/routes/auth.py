@@ -82,7 +82,7 @@ def initiate_login(body: InitLoginRequest, request: Request):
     qr_str = QRService.generate_signed_payload(payload_data)
 
     # Generate URL Link
-    # request.base_url gives e.g. "http://127.0.0.1:8000/"
+    # request.base_url
     base_url = str(request.base_url).rstrip("/")
     encoded_payload = urllib.parse.quote(qr_str)
     qr_link = f"{base_url}/mobile-sim?p={encoded_payload}"

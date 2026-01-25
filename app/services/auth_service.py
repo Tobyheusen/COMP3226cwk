@@ -90,7 +90,7 @@ class AuthService:
             logger.info(f"Scan failed: login_id={login_id} expired")
             return False
 
-        # Verify Payload content matches DB
+        # Check Payload content matches DB
         if qr_payload.get("login_id") != login_id:
             logger.warning(f"Scan failed: login_id={login_id} mismatch")
             return False
@@ -135,7 +135,7 @@ class AuthService:
         session_token = secrets.token_urlsafe(32)
         device_bound = bool(request.get("browser_key"))  # prevents session hijacking if browser_key is set
 
-        db.sessions[session_token] = {  # Saves to memory db
+        db.sessions[session_token] = {  # Saves to db
             "user_id": user_id,
             "browser_sid": request["browser_sid"],
             "created_at": datetime.utcnow(),
@@ -193,8 +193,6 @@ class AuthService:
             raise ValueError("Login not yet authorized")
 
         if not settings.require_browser_binding:
-            # If not in secure mode, maybe just return token?
-            # But this endpoint is specifically for proof.
             return {"session_token": request.get("session_token")}
 
         browser_key_jwk = request.get("browser_key")

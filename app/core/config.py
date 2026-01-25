@@ -15,7 +15,7 @@ class Settings(BaseModel):
     # Secrets
     SECRET_KEY: str = "supersecretkey" 
 
-    # Timeouts (in seconds)
+    # Timeouts
     LOGIN_TIMEOUT: int = 60  # Default 60s
     SESSION_TIMEOUT: int = 3600 # 1 hour
 

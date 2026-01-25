@@ -22,7 +22,7 @@ def root(request: Request):
             <h1>QR Code Login Prototype</h1>
             <div style="background: #fff3cd; padding: 15px; border: 1px solid #ffeeba; border-radius: 5px; margin-bottom: 20px;">
                 <strong>Setup Info:</strong>
-                <p>Ensure you are accessing this page via <code>https://</code> (Secure Context).</p>
+                <p>Ensure you are accessing this page via <code>https: //</code> (Secure Context).</p>
                 <p>Current Base URL: <code>{base_url}</code></p>
                 <p>If you are on a mobile device, ensure you are connected to the same network and accessing the server via its LAN IP.</p>
             </div>
@@ -205,7 +205,7 @@ def admin_dashboard():
         l_id = req["login_id"]
         status = req["status"]
         
-        # Only show Approve button if status is SCANNED
+        # show Approve button if status is SCANNED
         action_html = ""
         if status == "SCANNED":
             action_html = f"""
@@ -260,7 +260,7 @@ def admin_dashboard():
 
 @app.post("/admin/approve")
 def admin_approve(login_id: str = Form(...)):
-    # If admin approves, approve the login as "misc" user (this does not matter much for demo)
+    # If admin approves, approve the login as "misc" user
     AuthService.approve_login(login_id, user_id="misc")
     return RedirectResponse(url="/admin", status_code=303)
 
@@ -268,8 +268,7 @@ def admin_approve(login_id: str = Form(...)):
 def mobile_sim_page(p: str):
     """
     Simulates the Mobile App.
-    1. Scans the QR automatically on load.
-    2. Polls the server until the Admin approves.
+    Scans the QR automatically on load, poll the server until the Admin approves.
     """
     payload_js = json.dumps(p)
 
@@ -292,7 +291,7 @@ def mobile_sim_page(p: str):
                     document.getElementById('status').innerText = "Scanning QR Code...";
                     
                     try {{
-                        // 1. Perform Scan
+                        // Perform Scan
                         const response = await fetch('/auth/scan', {{
                             method: 'POST',
                             headers: {{'Content-Type': 'application/json'}},
@@ -311,7 +310,7 @@ def mobile_sim_page(p: str):
                         document.getElementById('status').innerText = "Scanned! Waiting for Admin Approval...";
                         document.getElementById('status').className = "waiting";
 
-                        // 2. Start Polling for Approval
+                        // Start Polling for Approval
                         pollForApproval();
                         
                     }} catch (e) {{
